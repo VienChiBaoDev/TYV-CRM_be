@@ -23,6 +23,68 @@ enum ClinicBranch {
 }
 
 // ---------------------------------------------------------------------------
+// CRM khách hàng
+// ---------------------------------------------------------------------------
+
+/// Trạng thái khách hàng trong vòng đời CRM
+enum CustomerStatus {
+  LEAD
+  EXAMINING
+  IN_TREATMENT
+  COMPLETED
+  INACTIVE
+}
+
+/// Trạng thái lịch hẹn
+enum AppointmentStatus {
+  BOOKED
+  CONFIRMED
+  CHECKED_IN
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+/// Người giới thiệu khách hàng
+model Referrer {
+  id             String   @id @default(uuid()) @db.Uuid
+  fullName       String   @map("full_name")
+  phone          String?
+  type           String?
+  commissionRate Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  note           String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patients Patient[]
+
+  @@index([fullName])
+  @@index([phone])
+  @@map("referrers")
+}
+
+/// Lịch hẹn của khách hàng
+model Appointment {
+  id           String            @id @default(uuid()) @db.Uuid
+  patientId    String            @map("patient_id") @db.Uuid
+  scheduledAt  DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  doctorName   String?           @map("doctor_name")
+  clinicBranch ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  status       AppointmentStatus @default(BOOKED)
+  note         String?           @db.Text
+  visitId      String?           @map("visit_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@index([patientId])
+  @@index([status])
+  @@map("appointments")
+}
+
+// ---------------------------------------------------------------------------
 // Hồ sơ bệnh án (Medical Records)
 // ---------------------------------------------------------------------------
 
@@ -59,18 +121,25 @@ model Patient {
   tags             String[]     @default([])
   dietRestrictions String[]     @default([]) @map("diet_restrictions")
   nextFollowUpDate DateTime?    @map("next_follow_up_date") @db.Date
+  source           String?
+  customerStatus   CustomerStatus @default(LEAD) @map("customer_status")
+  referrerId       String?      @map("referrer_id") @db.Uuid
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  referrer            Referrer?            @relation(fields: [referrerId], references: [id], onDelete: SetNull)
   visits              MedicalVisit[]
   treatmentPlans      TreatmentPlan[]
   followUpSchedules   FollowUpSchedule[]
   clinicalAssessments ClinicalAssessment[]
+  appointments        Appointment[]
 
   @@index([fullName])
   @@index([phone])
   @@index([clinicBranch])
   @@index([nextFollowUpDate])
+  @@index([customerStatus])
+  @@index([referrerId])
   @@map("patients")
 }
 

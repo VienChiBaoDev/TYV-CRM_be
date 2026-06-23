@@ -7,6 +7,8 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReferrerModule } from './referrer/referrer.module';
+import { AppointmentModule } from './appointment/appointment.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { PrismaModule } from './prisma/prisma.module';
       max: 100,
     }),
     PrismaModule,
+    ReferrerModule,
+    AppointmentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
