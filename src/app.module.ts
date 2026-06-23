@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReferrerModule } from './referrer/referrer.module';
 import { AppointmentModule } from './appointment/appointment.module';
+import { PatientModule } from './patient/patient.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AppointmentModule } from './appointment/appointment.module';
     PrismaModule,
     ReferrerModule,
     AppointmentModule,
+    PatientModule,
   ],
   controllers: [AppController],
   providers: [AppService],
