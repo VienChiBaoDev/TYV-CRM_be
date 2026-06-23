@@ -6,9 +6,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -17,21 +15,20 @@ import { UsersModule } from './users/users.module';
       envFilePath: join(__dirname, '..', '.env'),
     }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 200,
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 200,
+      },
+    ]),
     CacheModule.register({
       isGlobal: true,
       ttl: 5 * 1000, // 5 seconds
       max: 100,
     }),
     PrismaModule,
-    AuthModule,
-    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-
