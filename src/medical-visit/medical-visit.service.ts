@@ -396,7 +396,7 @@ export class MedicalVisitService {
       where: { id: patientId },
       data: {
         nextFollowUpDate: followUpDate,
-        customer_status: customerStatus,
+        customerStatus: customerStatus,
       },
     });
   }

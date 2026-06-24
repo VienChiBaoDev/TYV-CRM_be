@@ -10,20 +10,19 @@ datasource db {
 
 /// Nhân viên phòng khám — schema sẵn cho auth/role (implement sau)
 model Staff {
-  id           String        @id @default(uuid()) @db.Uuid
-  email        String        @unique
-  passwordHash String        @map("password_hash")
-  fullName     String        @map("full_name")
-  role         StaffRole
-  clinicBranch ClinicBranch? @map("clinic_branch")
-  isActive     Boolean       @default(true) @map("is_active")
-  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  followUpsCreated PatientFollowUp[] @relation("FollowUpCreatedBy")
-  followUpsUpdated PatientFollowUp[] @relation("FollowUpUpdatedBy")
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique
+  passwordHash     String            @map("password_hash")
+  fullName         String            @map("full_name")
+  role             StaffRole
+  clinicBranch     ClinicBranch?     @map("clinic_branch")
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   visitsCreated    MedicalVisit[]    @relation("VisitCreatedBy")
   visitsUpdated    MedicalVisit[]    @relation("VisitUpdatedBy")
+  followUpsCreated PatientFollowUp[] @relation("FollowUpCreatedBy")
+  followUpsUpdated PatientFollowUp[] @relation("FollowUpUpdatedBy")
 
   @@index([role])
   @@index([clinicBranch])
@@ -50,10 +49,10 @@ model Patient {
   source           String?
   customerStatus   CustomerStatus    @default(LEAD) @map("customer_status")
   referrerId       String?           @map("referrer_id") @db.Uuid
-  appointments     appointments[]
-  followUps        PatientFollowUp[]
+  appointments     Appointment[]
   visits           MedicalVisit[]
-  referrer         referrers?        @relation(fields: [referrerId], references: [id])
+  followUps        PatientFollowUp[]
+  referrer         Referrer?         @relation(fields: [referrerId], references: [id])
   treatmentPlans   TreatmentPlan[]
 
   @@index([fullName])
@@ -85,15 +84,15 @@ model MedicalVisit {
   prescriptionDosage  String?              @map("prescription_dosage")
   labResults          String?              @map("lab_results")
   status              VisitStatus
-  createdById         String?              @map("created_by_id") @db.Uuid
-  updatedById         String?              @map("updated_by_id") @db.Uuid
   createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  followUpsOriginated PatientFollowUp[]    @relation("FollowUpOriginatingVisit")
-  followUpsCompleted  PatientFollowUp[]    @relation("FollowUpCompletedVisit")
-  createdBy           Staff?               @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy           Staff?               @relation("VisitUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdById         String?              @map("created_by_id") @db.Uuid
+  updatedById         String?              @map("updated_by_id") @db.Uuid
+  createdBy           Staff?               @relation("VisitCreatedBy", fields: [createdById], references: [id])
   patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  updatedBy           Staff?               @relation("VisitUpdatedBy", fields: [updatedById], references: [id])
+  followUpsCompleted  PatientFollowUp[]    @relation("FollowUpCompletedVisit")
+  followUpsOriginated PatientFollowUp[]    @relation("FollowUpOriginatingVisit")
   clinicalImages      VisitClinicalImage[]
   herbs               VisitHerb[]
 
@@ -121,9 +120,9 @@ model VisitClinicalImage {
   id          String                @id @default(uuid()) @db.Uuid
   visitId     String                @map("visit_id") @db.Uuid
   imageUrl    String                @map("image_url")
+  sortOrder   Int                   @default(0) @map("sort_order")
   storagePath String?               @map("storage_path")
   category    ClinicalImageCategory @default(OTHER)
-  sortOrder   Int                   @default(0) @map("sort_order")
   visit       MedicalVisit          @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   @@index([visitId, category, sortOrder])
@@ -190,11 +189,11 @@ model PatientFollowUp {
   updatedById        String?                   @map("updated_by_id") @db.Uuid
   createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  originatingVisit   MedicalVisit              @relation("FollowUpOriginatingVisit", fields: [originatingVisitId], references: [id], onDelete: Cascade)
   completedVisit     MedicalVisit?             @relation("FollowUpCompletedVisit", fields: [completedVisitId], references: [id])
-  createdBy          Staff?                    @relation("FollowUpCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdBy          Staff?                    @relation("FollowUpCreatedBy", fields: [createdById], references: [id])
+  originatingVisit   MedicalVisit              @relation("FollowUpOriginatingVisit", fields: [originatingVisitId], references: [id], onDelete: Cascade)
+  patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([followUpDate, scheduleStatus])
   @@index([assessmentDate, assessmentResult])
@@ -204,37 +203,39 @@ model PatientFollowUp {
   @@map("patient_follow_ups")
 }
 
-model appointments {
-  id            String            @id @db.Uuid
-  patient_id    String            @db.Uuid
-  scheduled_at  DateTime          @db.Timestamptz(6)
-  doctor_name   String?
-  clinic_branch ClinicBranch      @default(HANG_BONG)
-  status        AppointmentStatus @default(BOOKED)
-  note          String?
-  visit_id      String?           @db.Uuid
-  created_at    DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime          @db.Timestamptz(6)
-  patients      Patient           @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+model Appointment {
+  id           String            @id @default(uuid()) @db.Uuid
+  patientId    String            @map("patient_id") @db.Uuid
+  scheduledAt  DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  doctorName   String?           @map("doctor_name")
+  clinicBranch ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  status       AppointmentStatus @default(BOOKED)
+  note         String?
+  visitId      String?           @map("visit_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  @@index([patient_id])
-  @@index([scheduled_at])
+  @@index([patientId])
+  @@index([scheduledAt])
   @@index([status])
+  @@map("appointments")
 }
 
-model referrers {
-  id              String    @id @db.Uuid
-  full_name       String
-  phone           String?
-  type            String?
-  commission_rate Decimal?  @db.Decimal(5, 2)
-  note            String?
-  created_at      DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime  @db.Timestamptz(6)
-  patients        Patient[]
+model Referrer {
+  id             String    @id @default(uuid()) @db.Uuid
+  fullName       String    @map("full_name")
+  phone          String?
+  type           String?
+  commissionRate Decimal?  @map("commission_rate") @db.Decimal(5, 2)
+  note           String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  patients       Patient[]
 
-  @@index([full_name])
+  @@index([fullName])
   @@index([phone])
+  @@map("referrers")
 }
 
 enum ClinicalImageCategory {
@@ -253,7 +254,6 @@ enum ClinicBranch {
   CAU_GIAY
 }
 
-
 enum VisitMode {
   ONLINE
   IN_PERSON
@@ -271,7 +271,6 @@ enum TreatmentPlanStatus {
   IN_PROGRESS
   COMPLETED
 }
-
 
 enum FollowUpScheduleStatus {
   SCHEDULED

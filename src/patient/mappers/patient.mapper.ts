@@ -98,7 +98,7 @@ export function mapPatientToDetailResponse(
     nextFollowUpDate: patient.nextFollowUpDate
       ? formatDateOnly(patient.nextFollowUpDate)
       : null,
-    customerStatus: patient.customer_status,
+    customerStatus: patient.customerStatus,
     visitsCount: patient.visits.length,
     treatmentDays: computeTreatmentDays(patient.visits),
     visits: visitsAsc.map(mapVisitToResponse),
