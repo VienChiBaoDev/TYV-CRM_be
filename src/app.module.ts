@@ -7,6 +7,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PrismaModule } from './prisma/prisma.module';
       max: 100,
     }),
     PrismaModule,
+    StandardMedicalRecordModule,
   ],
   controllers: [AppController],
   providers: [AppService],
