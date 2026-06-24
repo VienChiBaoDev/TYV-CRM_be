@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ClinicBranch } from '@prisma/client';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { PatientDetailResponse } from './mappers/patient.mapper';
 import { PatientService } from './patient.service';
 
 @Controller('patients')
@@ -32,5 +33,12 @@ export class PatientController {
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.patientService.findOne(id);
+  }
+
+  @Get(':patientId/medical-record')
+  findMedicalRecord(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+  ): Promise<PatientDetailResponse> {
+    return this.patientService.findMedicalRecord(patientId);
   }
 }

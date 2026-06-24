@@ -6,10 +6,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { MedicalVisitModule } from './medical-visit/medical-visit.module';
+import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReferrerModule } from './referrer/referrer.module';
 import { AppointmentModule } from './appointment/appointment.module';
-import { PatientModule } from './patient/patient.module';
+import { SupabaseModule } from './supabase/supabase.module';
+import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
 @Module({
   imports: [
@@ -30,9 +33,12 @@ import { PatientModule } from './patient/patient.module';
       max: 100,
     }),
     PrismaModule,
+    SupabaseModule,
     ReferrerModule,
     AppointmentModule,
     PatientModule,
+    MedicalVisitModule,
+    StandardMedicalRecordModule,
   ],
   controllers: [AppController],
   providers: [AppService],
