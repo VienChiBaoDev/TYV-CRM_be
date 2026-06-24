@@ -7,6 +7,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
+import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
@@ -29,6 +30,7 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
       max: 100,
     }),
     PrismaModule,
+    PatientModule,
     MedicalVisitModule,
     StandardMedicalRecordModule,
   ],
