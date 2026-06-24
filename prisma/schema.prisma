@@ -8,32 +8,53 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Nhân viên phòng khám — schema sẵn cho auth/role (implement sau)
+model Staff {
+  id           String        @id @default(uuid()) @db.Uuid
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  fullName     String        @map("full_name")
+  role         StaffRole
+  clinicBranch ClinicBranch? @map("clinic_branch")
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  followUpsCreated PatientFollowUp[] @relation("FollowUpCreatedBy")
+  followUpsUpdated PatientFollowUp[] @relation("FollowUpUpdatedBy")
+  visitsCreated    MedicalVisit[]    @relation("VisitCreatedBy")
+  visitsUpdated    MedicalVisit[]    @relation("VisitUpdatedBy")
+
+  @@index([role])
+  @@index([clinicBranch])
+  @@map("staff")
+}
+
 /// Bệnh nhân — hồ sơ bệnh án chính
 model Patient {
-  id                  String               @id @default(uuid()) @db.Uuid
-  patientCode         String               @unique @map("patient_code")
-  fullName            String               @map("full_name")
-  gender              Gender
-  birthDate           DateTime?            @map("birth_date") @db.Date
-  occupation          String?
-  phone               String
-  address             String?
-  avatarInitials      String?              @map("avatar_initials")
-  clinicBranch        ClinicBranch         @default(HANG_BONG) @map("clinic_branch")
-  tags                String[]             @default([])
-  dietRestrictions    String[]             @default([]) @map("diet_restrictions")
-  nextFollowUpDate    DateTime?            @map("next_follow_up_date") @db.Date
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  source              String?
-  customer_status     CustomerStatus       @default(LEAD)
-  referrer_id         String?              @db.Uuid
-  appointments        appointments[]
-  clinicalAssessments ClinicalAssessment[]
-  followUpSchedules   FollowUpSchedule[]
-  visits              MedicalVisit[]
-  referrers           referrers?           @relation(fields: [referrer_id], references: [id])
-  treatmentPlans      TreatmentPlan[]
+  id               String            @id @default(uuid()) @db.Uuid
+  patientCode      String            @unique @map("patient_code")
+  fullName         String            @map("full_name")
+  gender           Gender
+  birthDate        DateTime?         @map("birth_date") @db.Date
+  occupation       String?
+  phone            String
+  address          String?
+  avatarInitials   String?           @map("avatar_initials")
+  clinicBranch     ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  tags             String[]          @default([])
+  dietRestrictions String[]          @default([]) @map("diet_restrictions")
+  nextFollowUpDate DateTime?         @map("next_follow_up_date") @db.Date
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  source           String?
+  customer_status  CustomerStatus    @default(LEAD)
+  referrer_id      String?           @db.Uuid
+  appointments     appointments[]
+  followUps        PatientFollowUp[]
+  visits           MedicalVisit[]
+  referrers        referrers?        @relation(fields: [referrer_id], references: [id])
+  treatmentPlans   TreatmentPlan[]
 
   @@index([fullName])
   @@index([phone])
@@ -64,9 +85,14 @@ model MedicalVisit {
   prescriptionDosage  String?              @map("prescription_dosage")
   labResults          String?              @map("lab_results")
   status              VisitStatus
+  createdById         String?              @map("created_by_id") @db.Uuid
+  updatedById         String?              @map("updated_by_id") @db.Uuid
   createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  clinicalAssessments ClinicalAssessment[]
+  followUpsOriginated PatientFollowUp[]    @relation("FollowUpOriginatingVisit")
+  followUpsCompleted  PatientFollowUp[]    @relation("FollowUpCompletedVisit")
+  createdBy           Staff?               @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy           Staff?               @relation("VisitUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   patient             Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinicalImages      VisitClinicalImage[]
   herbs               VisitHerb[]
@@ -144,40 +170,36 @@ model TreatmentSession {
   @@map("treatment_sessions")
 }
 
-/// Lịch tái khám — bệnh nhân sắp đến hạn tái khám
-model FollowUpSchedule {
-  id                String                 @id @default(uuid()) @db.Uuid
-  patientId         String                 @map("patient_id") @db.Uuid
-  followUpDate      DateTime               @map("follow_up_date") @db.Date
-  physicianInCharge String                 @map("physician_in_charge")
-  facility          ClinicBranch           @default(HANG_BONG)
-  status            FollowUpScheduleStatus @default(NOT_SCHEDULED)
-  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient           Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+/// Chu kỳ tái khám & hỏi thăm — sinh ra từ một lượt khám
+model PatientFollowUp {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  patientId          String                    @map("patient_id") @db.Uuid
+  originatingVisitId String                    @map("originating_visit_id") @db.Uuid
+  completedVisitId   String?                   @map("completed_visit_id") @db.Uuid
+  followUpDate       DateTime                  @map("follow_up_date") @db.Date
+  assessmentDate     DateTime                  @map("assessment_date") @db.Date
+  physicianInCharge  String                    @map("physician_in_charge")
+  facility           ClinicBranch              @default(HANG_BONG)
+  scheduleStatus     FollowUpScheduleStatus    @default(NOT_SCHEDULED) @map("schedule_status")
+  assessmentResult   ClinicalAssessmentResult? @map("assessment_result")
+  assessmentNote     String?                   @map("assessment_note")
+  assessedAt         DateTime?                 @map("assessed_at") @db.Timestamptz(6)
+  createdById        String?                   @map("created_by_id") @db.Uuid
+  updatedById        String?                   @map("updated_by_id") @db.Uuid
+  createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  originatingVisit   MedicalVisit              @relation("FollowUpOriginatingVisit", fields: [originatingVisitId], references: [id], onDelete: Cascade)
+  completedVisit     MedicalVisit?             @relation("FollowUpCompletedVisit", fields: [completedVisitId], references: [id])
+  createdBy          Staff?                    @relation("FollowUpCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  @@index([followUpDate, status])
+  @@index([followUpDate, scheduleStatus])
+  @@index([assessmentDate, assessmentResult])
   @@index([patientId])
-  @@map("follow_up_schedules")
-}
-
-/// Đánh giá lâm sàng / hỏi thăm sau tái khám
-model ClinicalAssessment {
-  id                String                    @id @default(uuid()) @db.Uuid
-  patientId         String                    @map("patient_id") @db.Uuid
-  visitId           String?                   @map("visit_id") @db.Uuid
-  assessmentDate    DateTime                  @map("assessment_date") @db.Date
-  physicianInCharge String                    @map("physician_in_charge")
-  result            ClinicalAssessmentResult?
-  note              String?
-  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient           Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  visit             MedicalVisit?             @relation(fields: [visitId], references: [id])
-
-  @@index([patientId, assessmentDate(sort: Desc)])
-  @@index([result])
-  @@map("clinical_assessments")
+  @@index([originatingVisitId])
+  @@index([createdById])
+  @@map("patient_follow_ups")
 }
 
 model appointments {
@@ -269,4 +291,11 @@ enum CustomerStatus {
   IN_TREATMENT
   COMPLETED
   INACTIVE
+}
+
+enum StaffRole {
+  ADMIN
+  DOCTOR
+  CSKH
+  RECEPTION
 }
