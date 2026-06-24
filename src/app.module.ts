@@ -6,6 +6,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
@@ -28,6 +29,7 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
       max: 100,
     }),
     PrismaModule,
+    MedicalVisitModule,
     StandardMedicalRecordModule,
   ],
   controllers: [AppController],
