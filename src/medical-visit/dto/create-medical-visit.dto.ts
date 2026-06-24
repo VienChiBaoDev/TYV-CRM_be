@@ -54,7 +54,7 @@ export class FollowUpPlanDto {
 
   @IsInt()
   @Min(1)
-  @Max(6)
+  @Max(30)
   reminderDaysBefore!: number;
 
   @IsIn(['IN_TREATMENT', 'EXAMINING', 'COMPLETED'])
