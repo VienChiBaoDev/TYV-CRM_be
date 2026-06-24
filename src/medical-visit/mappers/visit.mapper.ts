@@ -1,5 +1,6 @@
 import {
   ClinicBranch,
+  ClinicalImageCategory,
   CustomerStatus,
   MedicalVisit,
   PatientFollowUp,
@@ -67,6 +68,7 @@ export interface VisitHerbResponse {
 export interface VisitClinicalImageResponse {
   readonly id: string;
   readonly imageUrl: string;
+  readonly category: ClinicalImageCategory;
   readonly sortOrder: number;
 }
 
@@ -170,6 +172,7 @@ export function mapVisitToResponse(visit: VisitWithRelations): MedicalVisitRespo
     clinicalImages: visit.clinicalImages.map((image) => ({
       id: image.id,
       imageUrl: image.imageUrl,
+      category: image.category,
       sortOrder: image.sortOrder,
     })),
     followUpPlan: followUp ? mapFollowUpToResponse(followUp) : null,

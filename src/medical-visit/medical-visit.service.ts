@@ -1,20 +1,46 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ClinicalImageCategory, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { FollowUpPlanDto } from './dto/create-medical-visit.dto';
 import {
   MedicalVisitResponse,
+  VisitClinicalImageResponse,
   mapVisitToResponse,
   parseDateOnly,
   resolveClinicBranchFromLocation,
   subtractDays,
   toCustomerStatus,
 } from './mappers/visit.mapper';
+
+const MAX_CLINICAL_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+const CATEGORY_STORAGE_FOLDER: Record<ClinicalImageCategory, string> = {
+  DIAGNOSIS: 'diagnosis',
+  LAB_RESULT: 'lab-result',
+  OTHER: 'other',
+};
+
+const MIME_EXTENSION: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 
 const visitInclude = {
   herbs: { orderBy: { sortOrder: 'asc' as const } },
@@ -24,7 +50,10 @@ const visitInclude = {
 
 @Injectable()
 export class MedicalVisitService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly supabaseStorage: SupabaseStorageService,
+  ) {}
 
   async findAllByPatient(patientId: string): Promise<MedicalVisitResponse[]> {
     await this.ensurePatientExists(patientId);
@@ -116,6 +145,7 @@ export class MedicalVisitService {
               data: dto.visit.clinicalImages.map((image, index) => ({
                 visitId,
                 imageUrl: image.imageUrl,
+                category: ClinicalImageCategory.OTHER,
                 sortOrder: index,
               })),
             });
@@ -157,6 +187,67 @@ export class MedicalVisitService {
       await tx.medicalVisit.delete({ where: { id: visitId } });
       await this.syncPatientNextFollowUpDate(tx, patientId);
     });
+  }
+
+  async uploadClinicalImage(
+    patientId: string,
+    visitId: string,
+    file: Express.Multer.File,
+    category: ClinicalImageCategory,
+  ): Promise<VisitClinicalImageResponse> {
+    await this.getVisitOrThrow(patientId, visitId);
+    this.assertValidImageFile(file);
+
+    const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
+    const folder = CATEGORY_STORAGE_FOLDER[category];
+    const storagePath = `patients/${patientId}/visits/${visitId}/${folder}/${randomUUID()}.${extension}`;
+
+    const uploaded = await this.supabaseStorage.uploadObject(
+      storagePath,
+      file.buffer,
+      file.mimetype,
+    );
+
+    const sortOrder = await this.getNextImageSortOrder(visitId, category);
+
+    const image = await this.prisma.visitClinicalImage.create({
+      data: {
+        visitId,
+        imageUrl: uploaded.publicUrl,
+        storagePath: uploaded.storagePath,
+        category,
+        sortOrder,
+      },
+    });
+
+    return {
+      id: image.id,
+      imageUrl: image.imageUrl,
+      category: image.category,
+      sortOrder: image.sortOrder,
+    };
+  }
+
+  async deleteClinicalImage(
+    patientId: string,
+    visitId: string,
+    imageId: string,
+  ): Promise<void> {
+    await this.getVisitOrThrow(patientId, visitId);
+
+    const image = await this.prisma.visitClinicalImage.findFirst({
+      where: { id: imageId, visitId },
+    });
+
+    if (!image) {
+      throw new NotFoundException('Clinical image not found');
+    }
+
+    if (image.storagePath) {
+      await this.supabaseStorage.removeObject(image.storagePath);
+    }
+
+    await this.prisma.visitClinicalImage.delete({ where: { id: imageId } });
   }
 
   private async ensurePatientExists(patientId: string): Promise<void> {
@@ -231,6 +322,7 @@ export class MedicalVisitService {
         ? {
             create: visit.clinicalImages.map((image, index) => ({
               imageUrl: image.imageUrl,
+              category: ClinicalImageCategory.OTHER,
               sortOrder: index,
             })),
           }
@@ -328,5 +420,33 @@ export class MedicalVisitService {
         nextFollowUpDate: latestFollowUp?.followUpDate ?? null,
       },
     });
+  }
+
+  private assertValidImageFile(file: Express.Multer.File): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    if (file.size > MAX_CLINICAL_IMAGE_BYTES) {
+      throw new BadRequestException('Image file must be 10MB or smaller');
+    }
+
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Only JPEG, PNG, WebP, and GIF images are allowed',
+      );
+    }
+  }
+
+  private async getNextImageSortOrder(
+    visitId: string,
+    category: ClinicalImageCategory,
+  ): Promise<number> {
+    const aggregate = await this.prisma.visitClinicalImage.aggregate({
+      where: { visitId, category },
+      _max: { sortOrder: true },
+    });
+
+    return (aggregate._max?.sortOrder ?? -1) + 1;
   }
 }

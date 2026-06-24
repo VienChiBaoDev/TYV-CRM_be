@@ -118,13 +118,15 @@ model VisitHerb {
 
 /// Hình ảnh lâm sàng đính kèm lượt khám
 model VisitClinicalImage {
-  id        String       @id @default(uuid()) @db.Uuid
-  visitId   String       @map("visit_id") @db.Uuid
-  imageUrl  String       @map("image_url")
-  sortOrder Int          @default(0) @map("sort_order")
-  visit     MedicalVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id          String                @id @default(uuid()) @db.Uuid
+  visitId     String                @map("visit_id") @db.Uuid
+  imageUrl    String                @map("image_url")
+  storagePath String?               @map("storage_path")
+  category    ClinicalImageCategory @default(OTHER)
+  sortOrder   Int                   @default(0) @map("sort_order")
+  visit       MedicalVisit          @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
-  @@index([visitId, sortOrder])
+  @@index([visitId, category, sortOrder])
   @@map("visit_clinical_images")
 }
 
@@ -233,6 +235,12 @@ model referrers {
 
   @@index([full_name])
   @@index([phone])
+}
+
+enum ClinicalImageCategory {
+  DIAGNOSIS
+  LAB_RESULT
+  OTHER
 }
 
 enum Gender {

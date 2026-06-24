@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SupabaseModule } from './supabase/supabase.module';
 import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
       max: 100,
     }),
     PrismaModule,
+    SupabaseModule,
     PatientModule,
     MedicalVisitModule,
     StandardMedicalRecordModule,
