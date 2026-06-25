@@ -7,10 +7,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
+import { ReferrerModule } from './referrer/referrer.module';
+import { StaffModule } from './staff/staff.module';
 import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
@@ -40,6 +43,9 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
     PatientModule,
     MedicalVisitModule,
     PatientFollowUpModule,
+    ReferrerModule,
+    AppointmentModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [
