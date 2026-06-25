@@ -12,6 +12,9 @@ import {
 import { ClinicBranch, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { DEFAULT_DAYS_AHEAD } from 'src/common/common';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
+import type { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
+import { buildPaginatedMeta, paginateArray } from 'src/common/pagination/paginate';
 import { ScheduleFollowUpDto } from './dto/schedule-follow-up.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 
@@ -64,7 +67,12 @@ export class PatientFollowUpService {
   /** Bảng 2: Cần hỏi thăm — đến hạn assessmentDate, chưa có kết quả */
   async findPendingAssessments(params: {
     branch?: ClinicBranch;
-  }): Promise<PendingAssessmentItemResponse[]> {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
+    const page = params.page ?? DEFAULT_PAGE;
+    const limit = params.limit ?? DEFAULT_LIMIT;
+
     const rows = await this.prisma.patientFollowUp.findMany({
       where: {
         completedVisitId: null,
@@ -80,10 +88,16 @@ export class PatientFollowUpService {
         assessmentDate: 'asc',
       },
     });
+    // Lấy lịch tái khám gần nhất cho mỗi bệnh nhân
     const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    return latestPerPatient
+    const items = latestPerPatient
       .sort((a, b) => a.assessmentDate.getTime() - b.assessmentDate.getTime())
       .map(mapToPendingAssessmentItem);
+
+    return {
+      data: paginateArray(items, page, limit),
+      meta: buildPaginatedMeta(page, limit, items.length),
+    };
   }
   //  Nút "Đặt nhanh" — tạo appointment + đánh dấu đã đặt lịch
   async scheduleFollowUp(
