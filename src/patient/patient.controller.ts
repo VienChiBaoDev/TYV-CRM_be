@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ClinicBranch } from '@prisma/client';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
@@ -35,6 +27,7 @@ export class PatientController {
     return this.patientService.findOne(id);
   }
 
+  // Chi tiết mỗi lần khám của khách hàng
   @Get(':patientId/medical-record')
   findMedicalRecord(
     @Param('patientId', ParseUUIDPipe) patientId: string,

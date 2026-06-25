@@ -10,7 +10,7 @@ import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
-import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
+import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.module';
 
 @Module({
   imports: [
@@ -34,7 +34,7 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
     SupabaseModule,
     PatientModule,
     MedicalVisitModule,
-    StandardMedicalRecordModule,
+    PatientFollowUpModule,
   ],
   controllers: [AppController],
   providers: [AppService],

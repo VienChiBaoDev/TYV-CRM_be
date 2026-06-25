@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ClinicalImageCategory, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,12 +18,7 @@ import {
 
 const MAX_CLINICAL_IMAGE_BYTES = 10 * 1024 * 1024;
 
-const ALLOWED_IMAGE_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-]);
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const CATEGORY_STORAGE_FOLDER: Record<ClinicalImageCategory, string> = {
   DIAGNOSIS: 'diagnosis',
@@ -67,30 +58,28 @@ export class MedicalVisitService {
     return visits.map(mapVisitToResponse);
   }
 
-  async findOne(
-    patientId: string,
-    visitId: string,
-  ): Promise<MedicalVisitResponse> {
+  async findOne(patientId: string, visitId: string): Promise<MedicalVisitResponse> {
     const visit = await this.getVisitOrThrow(patientId, visitId);
     return mapVisitToResponse(visit);
   }
 
-  async create(
-    patientId: string,
-    dto: CreateMedicalVisitDto,
-  ): Promise<MedicalVisitResponse> {
+  async create(patientId: string, dto: CreateMedicalVisitDto): Promise<MedicalVisitResponse> {
     await this.ensurePatientExists(patientId);
 
     const visit = await this.prisma.$transaction(async (tx) => {
+      // Lấy số thứ tự của lần khám mới nhất theo id khách hàng
       const visitNumber = await this.getNextVisitNumber(tx, patientId);
+      // Xây dựng dữ liệu lần khám mới
       const visitData = this.buildVisitCreateData(patientId, visitNumber, dto.visit);
 
       const createdVisit = await tx.medicalVisit.create({
+        // Tạo lần khám mới
         data: visitData,
         include: visitInclude,
       });
 
       if (dto.followUpPlan) {
+        // Tạo lần theo dõi sau khám
         await this.upsertFollowUpPlan(
           tx,
           patientId,
@@ -100,13 +89,14 @@ export class MedicalVisitService {
           dto.followUpPlan,
         );
       }
-
+      // Lấy lần khám mới nhất
       return tx.medicalVisit.findUniqueOrThrow({
         where: { id: createdVisit.id },
         include: visitInclude,
       });
     });
 
+    // Trả về lần khám mới nhất
     return mapVisitToResponse(visit);
   }
 
@@ -115,18 +105,22 @@ export class MedicalVisitService {
     visitId: string,
     dto: UpdateMedicalVisitDto,
   ): Promise<MedicalVisitResponse> {
+    // Lấy lần khám cũ
     const existing = await this.getVisitOrThrow(patientId, visitId);
 
     const visit = await this.prisma.$transaction(async (tx) => {
       if (dto.visit) {
+        // Cập nhật lần khám cũ
         await tx.medicalVisit.update({
           where: { id: visitId },
           data: this.buildVisitUpdateData(dto.visit),
         });
 
         if (dto.visit.herbs !== undefined) {
+          // Xóa các loại thuốc cũ
           await tx.visitHerb.deleteMany({ where: { visitId } });
           if (dto.visit.herbs.length > 0) {
+            // Tạo các loại thuốc mới
             await tx.visitHerb.createMany({
               data: dto.visit.herbs.map((herb, index) => ({
                 visitId,
@@ -137,9 +131,11 @@ export class MedicalVisitService {
             });
           }
         }
-
+        // Cập nhật các ảnh khám cũ
         if (dto.visit.clinicalImages !== undefined) {
+          // Xóa các ảnh khám cũ
           await tx.visitClinicalImage.deleteMany({ where: { visitId } });
+          // Tạo các ảnh khám mới
           if (dto.visit.clinicalImages.length > 0) {
             await tx.visitClinicalImage.createMany({
               data: dto.visit.clinicalImages.map((image, index) => ({
@@ -152,13 +148,15 @@ export class MedicalVisitService {
           }
         }
       }
-
+      // Xóa lần theo dõi sau khám
       if (dto.followUpPlan === null) {
         await tx.patientFollowUp.deleteMany({
           where: { originatingVisitId: visitId },
         });
+        // Cập nhật ngày khám tiếp theo
         await this.syncPatientNextFollowUpDate(tx, patientId);
       } else if (dto.followUpPlan) {
+        // Tạo lần theo dõi sau khám
         const doctorName = dto.visit?.doctorName ?? existing.doctorName;
         const location = dto.visit?.location ?? existing.location;
         await this.upsertFollowUpPlan(
@@ -195,20 +193,27 @@ export class MedicalVisitService {
     file: Express.Multer.File,
     category: ClinicalImageCategory,
   ): Promise<VisitClinicalImageResponse> {
+    // Lấy lần khám
     await this.getVisitOrThrow(patientId, visitId);
+    // Kiểm tra file ảnh
     this.assertValidImageFile(file);
+    // Lấy phần mở rộng của file ảnh
 
     const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
     const folder = CATEGORY_STORAGE_FOLDER[category];
+    // Tạo đường dẫn lưu trữ ảnh
     const storagePath = `patients/${patientId}/visits/${visitId}/${folder}/${randomUUID()}.${extension}`;
 
+    // Tải ảnh lên Supabase
     const uploaded = await this.supabaseStorage.uploadObject(
       storagePath,
       file.buffer,
       file.mimetype,
     );
 
+    // Lấy số thứ tự của ảnh mới nhất
     const sortOrder = await this.getNextImageSortOrder(visitId, category);
+    // Tạo ảnh mới
 
     const image = await this.prisma.visitClinicalImage.create({
       data: {
@@ -220,6 +225,7 @@ export class MedicalVisitService {
       },
     });
 
+    // Trả về ảnh mới nhất
     return {
       id: image.id,
       imageUrl: image.imageUrl,
@@ -228,28 +234,29 @@ export class MedicalVisitService {
     };
   }
 
-  async deleteClinicalImage(
-    patientId: string,
-    visitId: string,
-    imageId: string,
-  ): Promise<void> {
+  async deleteClinicalImage(patientId: string, visitId: string, imageId: string): Promise<void> {
+    // Lấy lần khám
     await this.getVisitOrThrow(patientId, visitId);
-
+    // Lấy ảnh khám
+    // Lấy ảnh khám theo id lần khám và id ảnh khám
     const image = await this.prisma.visitClinicalImage.findFirst({
       where: { id: imageId, visitId },
     });
 
+    // Kiểm tra ảnh khám
     if (!image) {
       throw new NotFoundException('Clinical image not found');
     }
 
+    // Xóa ảnh khám từ Supabase
     if (image.storagePath) {
       await this.supabaseStorage.removeObject(image.storagePath);
     }
 
+    // Xóa ảnh khám từ database
     await this.prisma.visitClinicalImage.delete({ where: { id: imageId } });
   }
-
+  // Kiểm tra khách hàng tồn tại
   private async ensurePatientExists(patientId: string): Promise<void> {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
@@ -260,7 +267,7 @@ export class MedicalVisitService {
       throw new NotFoundException('Patient not found');
     }
   }
-
+  // Lấy lần khám theo id khách hàng và id lần khám
   private async getVisitOrThrow(patientId: string, visitId: string) {
     const visit = await this.prisma.medicalVisit.findFirst({
       where: { id: visitId, patientId },
@@ -391,12 +398,40 @@ export class MedicalVisitService {
         },
       });
     }
+    // Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới
+    await this.supersedeOlderIncompleteFollowUps(tx, patientId, originatingVisitId);
 
     await tx.patient.update({
       where: { id: patientId },
       data: {
-        nextFollowUpDate: followUpDate,
+        /** Cập nhật trạng thái khách hàng */
         customerStatus: customerStatus,
+      },
+    });
+
+    await this.syncPatientNextFollowUpDate(tx, patientId);
+  }
+
+  /** Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới */
+  private async supersedeOlderIncompleteFollowUps(
+    tx: Prisma.TransactionClient,
+    patientId: string,
+    originatingVisitId: string,
+  ): Promise<void> {
+    const currentVisit = await tx.medicalVisit.findUnique({
+      where: { id: originatingVisitId },
+      select: { visitNumber: true },
+    });
+    if (!currentVisit) return;
+
+    await tx.patientFollowUp.deleteMany({
+      where: {
+        patientId,
+        completedVisitId: null,
+        originatingVisitId: { not: originatingVisitId },
+        originatingVisit: {
+          visitNumber: { lt: currentVisit.visitNumber },
+        },
       },
     });
   }
@@ -432,9 +467,7 @@ export class MedicalVisitService {
     }
 
     if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
-      throw new BadRequestException(
-        'Only JPEG, PNG, WebP, and GIF images are allowed',
-      );
+      throw new BadRequestException('Only JPEG, PNG, WebP, and GIF images are allowed');
     }
   }
 
