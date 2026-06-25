@@ -2,10 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClinicBranch, CustomerStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
-import {
-  mapPatientToDetailResponse,
-  PatientDetailResponse,
-} from './mappers/patient.mapper';
+import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/patient.mapper';
 
 interface FindPatientsParams {
   search?: string;
@@ -83,7 +80,7 @@ export class PatientService {
 
     return patient;
   }
-
+  // Lấy chi tiết mỗi lần khám của khách hàng
   async findMedicalRecord(patientId: string): Promise<PatientDetailResponse> {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
