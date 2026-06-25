@@ -9,8 +9,6 @@ import { AppService } from './app.service';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { ReferrerModule } from './referrer/referrer.module';
-import { AppointmentModule } from './appointment/appointment.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { StandardMedicalRecordModule } from './standard-medical-record/standard-medical-record.module';
 
@@ -34,8 +32,6 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
     }),
     PrismaModule,
     SupabaseModule,
-    ReferrerModule,
-    AppointmentModule,
     PatientModule,
     MedicalVisitModule,
     StandardMedicalRecordModule,
@@ -43,4 +39,4 @@ import { StandardMedicalRecordModule } from './standard-medical-record/standard-
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
