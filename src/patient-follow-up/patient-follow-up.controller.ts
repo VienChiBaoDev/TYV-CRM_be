@@ -15,10 +15,14 @@ export class PatientFollowUpController {
   constructor(private readonly patientFollowUpService: PatientFollowUpService) {}
 
   @Get('upcoming')
-  findUpcoming(@Query() query: QueryUpcomingFollowUpsDto): Promise<FollowUpScheduleItemResponse[]> {
+  findUpcoming(
+    @Query() query: QueryUpcomingFollowUpsDto,
+  ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     return this.patientFollowUpService.findUpcoming({
       branch: query.branch,
       daysAhead: query.daysAhead,
+      page: query.page,
+      limit: query.limit,
     });
   }
 

@@ -35,9 +35,13 @@ export class PatientFollowUpService {
   async findUpcoming(params: {
     branch?: ClinicBranch;
     daysAhead?: number;
-  }): Promise<FollowUpScheduleItemResponse[]> {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     const branch = params.branch ?? ClinicBranch.HANG_BONG;
     const daysAhead = params.daysAhead ?? DEFAULT_DAYS_AHEAD;
+    const page = params.page ?? DEFAULT_PAGE;
+    const limit = params.limit ?? DEFAULT_LIMIT;
     const today = startOfTodayUtc();
     // Thêm N ngày vào ngày hôm nay
     const endDate = addDaysUtc(today, daysAhead);
@@ -60,9 +64,14 @@ export class PatientFollowUpService {
       },
     });
     const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    return latestPerPatient
+    const items = latestPerPatient
       .sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())
       .map(mapToScheduleItem);
+
+    return {
+      data: paginateArray(items, page, limit),
+      meta: buildPaginatedMeta(page, limit, items.length),
+    };
   }
   /** Bảng 2: Cần hỏi thăm — đến hạn assessmentDate, chưa có kết quả */
   async findPendingAssessments(params: {
@@ -72,7 +81,6 @@ export class PatientFollowUpService {
   }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
     const page = params.page ?? DEFAULT_PAGE;
     const limit = params.limit ?? DEFAULT_LIMIT;
-
     const rows = await this.prisma.patientFollowUp.findMany({
       where: {
         completedVisitId: null,
