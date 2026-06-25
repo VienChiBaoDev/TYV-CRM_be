@@ -305,6 +305,6 @@ enum CustomerStatus {
 enum StaffRole {
   ADMIN
   DOCTOR
-  CSKH
-  RECEPTION
+  ASSISTANT
+  STAFF
 }

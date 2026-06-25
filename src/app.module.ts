@@ -1,11 +1,15 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -32,11 +36,17 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
     }),
     PrismaModule,
     SupabaseModule,
+    AuthModule,
     PatientModule,
     MedicalVisitModule,
     PatientFollowUpModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Xác thực JWT toàn cục (trừ route gắn @Public), sau đó kiểm tra @Roles.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule { }
