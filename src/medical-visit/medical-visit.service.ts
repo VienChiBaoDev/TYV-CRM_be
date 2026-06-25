@@ -398,12 +398,40 @@ export class MedicalVisitService {
         },
       });
     }
+    // Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới
+    await this.supersedeOlderIncompleteFollowUps(tx, patientId, originatingVisitId);
 
     await tx.patient.update({
       where: { id: patientId },
       data: {
-        nextFollowUpDate: followUpDate,
+        /** Cập nhật trạng thái khách hàng */
         customerStatus: customerStatus,
+      },
+    });
+
+    await this.syncPatientNextFollowUpDate(tx, patientId);
+  }
+
+  /** Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới */
+  private async supersedeOlderIncompleteFollowUps(
+    tx: Prisma.TransactionClient,
+    patientId: string,
+    originatingVisitId: string,
+  ): Promise<void> {
+    const currentVisit = await tx.medicalVisit.findUnique({
+      where: { id: originatingVisitId },
+      select: { visitNumber: true },
+    });
+    if (!currentVisit) return;
+
+    await tx.patientFollowUp.deleteMany({
+      where: {
+        patientId,
+        completedVisitId: null,
+        originatingVisitId: { not: originatingVisitId },
+        originatingVisit: {
+          visitNumber: { lt: currentVisit.visitNumber },
+        },
       },
     });
   }

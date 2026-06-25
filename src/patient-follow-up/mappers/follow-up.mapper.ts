@@ -65,6 +65,29 @@ type FollowUpWithPatient = PatientFollowUp & {
   // Pick lấy ra các field cần thiết từ Patient
   patient: Pick<Patient, 'id' | 'fullName' | 'patientCode'>;
 };
+
+type FollowUpWithOriginatingVisit = FollowUpWithPatient & {
+  originatingVisit: { visitNumber: number };
+};
+
+/** Mỗi bệnh nhân chỉ giữ lịch tái khám từ lần khám mới nhất */
+export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVisit>(
+  rows: T[],
+): T[] {
+  const latestByPatient = new Map<string, T>();
+
+  for (const row of rows) {
+    const existing = latestByPatient.get(row.patientId);
+    if (
+      !existing ||
+      row.originatingVisit.visitNumber > existing.originatingVisit.visitNumber
+    ) {
+      latestByPatient.set(row.patientId, row);
+    }
+  }
+
+  return Array.from(latestByPatient.values());
+}
 // Dùng cho Bảng 1: Sắp đến hạn tái khám trong N ngày tới (Không có assessment)
 export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleItemResponse {
   return {

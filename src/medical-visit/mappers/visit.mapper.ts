@@ -33,7 +33,10 @@ export function parseDateOnly(isoDate: string): Date {
 }
 
 export function formatDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function subtractDays(isoDate: string, days: number): Date {

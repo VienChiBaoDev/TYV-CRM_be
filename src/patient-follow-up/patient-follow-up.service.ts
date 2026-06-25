@@ -4,6 +4,7 @@ import {
   PendingAssessmentItemResponse,
   addDaysUtc,
   endOfTodayUtc,
+  keepLatestFollowUpPerPatient,
   mapToPendingAssessmentItem,
   mapToScheduleItem,
   startOfTodayUtc,
@@ -17,6 +18,9 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 const followUpInclude = {
   patient: {
     select: { id: true, fullName: true, patientCode: true },
+  },
+  originatingVisit: {
+    select: { visitNumber: true },
   },
 } satisfies Prisma.PatientFollowUpInclude;
 
@@ -47,12 +51,15 @@ export class PatientFollowUpService {
         /** Tại cơ sở */
         ...(branch ? { facility: branch } : {}),
       },
-      include: followUpInclude, // ← thêm dòng này
+      include: followUpInclude,
       orderBy: {
         followUpDate: 'asc',
       },
     });
-    return rows.map(mapToScheduleItem);
+    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
+    return latestPerPatient
+      .sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())
+      .map(mapToScheduleItem);
   }
   /** Bảng 2: Cần hỏi thăm — đến hạn assessmentDate, chưa có kết quả */
   async findPendingAssessments(params: {
@@ -73,7 +80,10 @@ export class PatientFollowUpService {
         assessmentDate: 'asc',
       },
     });
-    return rows.map(mapToPendingAssessmentItem);
+    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
+    return latestPerPatient
+      .sort((a, b) => a.assessmentDate.getTime() - b.assessmentDate.getTime())
+      .map(mapToPendingAssessmentItem);
   }
   //  Nút "Đặt nhanh" — tạo appointment + đánh dấu đã đặt lịch
   async scheduleFollowUp(
