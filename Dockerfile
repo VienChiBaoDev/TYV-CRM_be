@@ -1,5 +1,5 @@
 # Build stage — cache npm theo package-lock; chỉ rebuild khi đổi source
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
@@ -13,7 +13,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # Production — copy node_modules đã prune, không npm ci lại
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
