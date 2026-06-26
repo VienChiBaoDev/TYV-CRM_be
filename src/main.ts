@@ -49,9 +49,18 @@ async function bootstrap() {
 
   const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean);
   const allowedOrigins = corsOrigins?.length ? corsOrigins : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  // Cho phép mọi domain Vercel cua du an (production, git-branch, preview theo hash)
+  const vercelOriginPattern = /^https:\/\/tyv-crm[a-z0-9-]*\.vercel\.app$/i;
 
   app.enableCors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Request khong co origin (Postman, server-to-server, health check) -> cho phep
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || vercelOriginPattern.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin khong duoc phep boi CORS: ${origin}`), false);
+    },
     credentials: true,
   });
 
