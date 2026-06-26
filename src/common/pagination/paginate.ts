@@ -1,6 +1,7 @@
 import type { PaginatedMeta } from '../interfaces/paginated-response.interface';
 
 export function buildPaginatedMeta(page: number, limit: number, total: number): PaginatedMeta {
+  // Tính tổng số trang = tổng số dữ liệu / số lượng dữ liệu trên mỗi trang
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
   return {
