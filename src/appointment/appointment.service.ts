@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AppointmentStatus, ClinicBranch, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -16,10 +16,13 @@ export class AppointmentService {
   constructor(private readonly prisma: PrismaService) {}
 
   create(dto: CreateAppointmentDto) {
+    this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
+
     return this.prisma.appointment.create({
       data: {
         patientId: dto.patientId,
         scheduledAt: new Date(dto.scheduledAt),
+        endedAt: new Date(dto.endedAt),
         doctorName: dto.doctorName,
         clinicBranch: dto.clinicBranch,
         note: dto.note,
@@ -71,10 +74,21 @@ export class AppointmentService {
 
   async update(id: string, dto: UpdateAppointmentDto) {
     await this.findOne(id);
+
+    if (dto.scheduledAt && dto.endedAt) {
+      this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
+    } else if (dto.scheduledAt || dto.endedAt) {
+      const current = await this.findOne(id);
+      const scheduledAt = dto.scheduledAt ?? current.scheduledAt.toISOString();
+      const endedAt = dto.endedAt ?? current.endedAt.toISOString();
+      this.assertValidTimeRange(scheduledAt, endedAt);
+    }
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
         ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
+        ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
         ...(dto.doctorName !== undefined ? { doctorName: dto.doctorName } : {}),
         ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
         ...(dto.status ? { status: dto.status } : {}),
@@ -87,5 +101,14 @@ export class AppointmentService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.appointment.delete({ where: { id } });
+  }
+
+  private assertValidTimeRange(scheduledAt: string, endedAt: string): void {
+    const start = new Date(scheduledAt);
+    const end = new Date(endedAt);
+
+    if (end <= start) {
+      throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
+    }
   }
 }

@@ -5,6 +5,10 @@ export class ScheduleFollowUpDto {
   scheduledAt!: string;
 
   @IsOptional()
+  @IsISO8601()
+  endedAt?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(255)
   doctorName?: string;
