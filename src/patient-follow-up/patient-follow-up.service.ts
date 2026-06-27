@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   FollowUpScheduleItemResponse,
   PendingAssessmentItemResponse,
@@ -39,6 +44,7 @@ export class PatientFollowUpService {
     limit?: number;
   }): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     const branch = params.branch ?? ClinicBranch.HANG_BONG;
+    // N ngày tới
     const daysAhead = params.daysAhead ?? DEFAULT_DAYS_AHEAD;
     const page = params.page ?? DEFAULT_PAGE;
     const limit = params.limit ?? DEFAULT_LIMIT;
@@ -118,16 +124,20 @@ export class PatientFollowUpService {
     // Nếu tạo appointment thất bại thì rollback toàn bộ transaction
     // Ngược lại nếu cập nhật lịch tái khám thành đã đặt lịch thành công thì commit transaction
     // Nếu cập nhật lịch tái khám thành đã đặt lịch thất bại thì rollback transaction
+    if (followUp.scheduleStatus === 'SCHEDULED') {
+      throw new ConflictException('Lịch tái khám đã được đặt lịch');
+    }
     const updated = await this.prisma.$transaction(async (tx) => {
       const scheduledAt = new Date(body.scheduledAt);
       const endedAt = body.endedAt
         ? new Date(body.endedAt)
-        : new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+        : // 30 phút
+          new Date(scheduledAt.getTime() + 30 * 60 * 1000);
 
       if (endedAt <= scheduledAt) {
         throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
       }
-
+      //Dùng transaction — nếu tạo appointment lỗi thì không cập nhật scheduleStatus
       await tx.appointment.create({
         data: {
           patientId: followUp.patientId,

@@ -1,9 +1,10 @@
 import { IsISO8601, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ScheduleFollowUpDto {
+  // thời gian bắt đầu
   @IsISO8601()
   scheduledAt!: string;
-
+  // thời gian kết thúc
   @IsOptional()
   @IsISO8601()
   endedAt?: string;
