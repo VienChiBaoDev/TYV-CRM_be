@@ -6,6 +6,7 @@ import {
   PendingAssessmentItemResponse,
 } from './mappers/follow-up.mapper';
 import { QueryPendingAssessmentsDto } from './dto/query-pending-assessments.dto';
+import type { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 import { ScheduleFollowUpDto } from './dto/schedule-follow-up.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 
@@ -14,19 +15,25 @@ export class PatientFollowUpController {
   constructor(private readonly patientFollowUpService: PatientFollowUpService) {}
 
   @Get('upcoming')
-  findUpcoming(@Query() query: QueryUpcomingFollowUpsDto): Promise<FollowUpScheduleItemResponse[]> {
+  findUpcoming(
+    @Query() query: QueryUpcomingFollowUpsDto,
+  ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     return this.patientFollowUpService.findUpcoming({
       branch: query.branch,
       daysAhead: query.daysAhead,
+      page: query.page,
+      limit: query.limit,
     });
   }
 
   @Get('pending-assessment')
   findPendingAssessments(
     @Query() query: QueryPendingAssessmentsDto,
-  ): Promise<PendingAssessmentItemResponse[]> {
+  ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
     return this.patientFollowUpService.findPendingAssessments({
       branch: query.branch,
+      page: query.page,
+      limit: query.limit,
     });
   }
 
