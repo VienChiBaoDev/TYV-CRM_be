@@ -18,7 +18,7 @@ export class UpdateCatalogServiceDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @MaxLength(500)
   groupId?: string;
 
   @IsOptional()
