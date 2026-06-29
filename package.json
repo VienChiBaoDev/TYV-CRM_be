@@ -34,7 +34,8 @@
     "db:add-van78-dot2-unified-class": "node --env-file=.env scripts/add-van78-dot2-unified-class-members.js",
     "db:backfill-org-from-legacy-text": "node scripts/backfill-org-membership-from-legacy-text.js",
     "prisma:seed": "ts-node --project prisma/tsconfig.seed.json prisma/seed.ts",
-    "prisma:seed:dry": "prisma db seed -- --dry-run"
+    "prisma:seed:dry": "prisma db seed -- --dry-run",
+    "seed:staff": "ts-node --project prisma/tsconfig.seed.json scripts/seed-staff.ts"
   },
   "prisma": {
     "seed": "ts-node --project prisma/tsconfig.seed.json prisma/seed.ts"
@@ -54,6 +55,7 @@
     "@types/compression": "^1.8.1",
     "@types/pg": "^8.20.0",
     "axios": "^1.15.2",
+    "bcryptjs": "^3.0.3",
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -76,6 +78,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
