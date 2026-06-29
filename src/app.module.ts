@@ -13,6 +13,7 @@ import { ReferrerModule } from './referrer/referrer.module';
 import { AppointmentModule } from './appointment/appointment.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.module';
+import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
     PatientModule,
     MedicalVisitModule,
     PatientFollowUpModule,
+    ServiceCatalogModule,
   ],
   controllers: [AppController],
   providers: [AppService],
