@@ -274,6 +274,20 @@ model CatalogService {
   @@map("catalog_services")
 }
 
+/// Kho thuốc — dùng khi kê đơn trong lượt khám
+model Medicine {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  unit      String
+  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@index([name])
+  @@index([unit])
+  @@map("medicines")
+}
+
 enum ClinicalImageCategory {
   DIAGNOSIS
   LAB_RESULT

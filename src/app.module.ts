@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { MedicineModule } from './medicine/medicine.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
     ReferrerModule,
     AppointmentModule,
     StaffModule,
+    MedicineModule,
   ],
   controllers: [AppController],
   providers: [
