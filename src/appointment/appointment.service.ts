@@ -1,8 +1,25 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AppointmentStatus, ClinicBranch, Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { formatDateOnly } from 'src/medical-visit/mappers/visit.mapper';
+
+const CHECK_IN_ALLOWED_STATUSES: AppointmentStatus[] = [
+  AppointmentStatus.BOOKED,
+  AppointmentStatus.CONFIRMED,
+];
+
+// record để mapping branch với location
+const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
+  [ClinicBranch.HANG_BONG]: 'Hàng Bông',
+  [ClinicBranch.CAU_GIAY]: 'Cầu Giấy',
+};
 
 interface FindAppointmentsParams {
   branch?: ClinicBranch;
@@ -110,5 +127,69 @@ export class AppointmentService {
     if (end <= start) {
       throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
     }
+  }
+  // lấy số thứ tự của lượt khám tiếp theo cho bệnh nhân
+  private async getNextVisitNumber(
+    tx: Prisma.TransactionClient,
+    patientId: string,
+  ): Promise<number> {
+    // lấy số thứ tự lượt khám lớn nhất của bệnh nhân
+    // và cộng 1 để lấy số thứ tự tiếp theo
+    // nếu không có lượt khám nào thì trả về 1
+    // dùng aggregate để lấy số thứ tự lớn nhất
+    const aggregate = await tx.medicalVisit.aggregate({
+      where: { patientId },
+      _max: { visitNumber: true },
+    });
+    return (aggregate._max.visitNumber ?? 0) + 1;
+  }
+
+  async checkIn(id: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        patient: {
+          select: { id: true, fullName: true, patientCode: true, phone: true },
+        },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundException('Không tìm thấy lịch hẹn');
+    }
+    if (appointment.visitId) {
+      throw new ConflictException('Lịch hẹn đã được tiếp nhận');
+    }
+    if (!CHECK_IN_ALLOWED_STATUSES.includes(appointment.status)) {
+      throw new BadRequestException('Chỉ có thể tiếp nhận lịch ở trạng thái Đã đặt hoặc Xác nhận');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const visitNumber = await this.getNextVisitNumber(tx, appointment.patientId);
+      const visitDate = formatDateOnly(appointment.scheduledAt);
+
+      const visit = await tx.medicalVisit.create({
+        data: {
+          patientId: appointment.patientId,
+          visitNumber,
+          title: `Khám theo lịch hẹn #${visitNumber}`,
+          visitDate: new Date(`${visitDate}T00:00:00.000Z`),
+          doctorName: appointment.doctorName ?? 'Chưa phân công',
+          mode: VisitMode.IN_PERSON,
+          location: BRANCH_TO_LOCATION[appointment.clinicBranch],
+          status: VisitStatus.INITIAL_EXAM,
+        },
+      });
+      return tx.appointment.update({
+        where: { id },
+        data: {
+          status: AppointmentStatus.CHECKED_IN,
+          visitId: visit.id,
+        },
+        include: {
+          patient: {
+            select: { id: true, fullName: true, patientCode: true, phone: true },
+          },
+        },
+      });
+    });
   }
 }

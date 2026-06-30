@@ -39,15 +39,17 @@ export class AppointmentController {
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateAppointmentDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAppointmentDto) {
     return this.appointmentService.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.appointmentService.remove(id);
+  }
+
+  @Post(':id/check-in')
+  checkIn(@Param('id', ParseUUIDPipe) id: string) {
+    return this.appointmentService.checkIn(id);
   }
 }
