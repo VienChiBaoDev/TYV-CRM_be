@@ -8,12 +8,8 @@ import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { formatDateOnly } from 'src/medical-visit/mappers/visit.mapper';
-
-const CHECK_IN_ALLOWED_STATUSES: AppointmentStatus[] = [
-  AppointmentStatus.BOOKED,
-  AppointmentStatus.CONFIRMED,
-];
+import { assertAppointmentStatusTransition, CHECK_IN_ALLOWED_STATUSES } from './appointment-status.rules';
+import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
 
 // record để mapping branch với location
 const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
@@ -90,15 +86,26 @@ export class AppointmentService {
   }
 
   async update(id: string, dto: UpdateAppointmentDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
 
     if (dto.scheduledAt && dto.endedAt) {
       this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     } else if (dto.scheduledAt || dto.endedAt) {
-      const current = await this.findOne(id);
       const scheduledAt = dto.scheduledAt ?? current.scheduledAt.toISOString();
       const endedAt = dto.endedAt ?? current.endedAt.toISOString();
       this.assertValidTimeRange(scheduledAt, endedAt);
+    }
+
+    if (dto.status) {
+      assertAppointmentStatusTransition(
+        current.status,
+        dto.status,
+        current.visitId,
+      );
+    }
+
+    if (dto.visitId !== undefined) {
+      throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
     }
 
     return this.prisma.appointment.update({
@@ -110,7 +117,11 @@ export class AppointmentService {
         ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
         ...(dto.status ? { status: dto.status } : {}),
         ...(dto.note !== undefined ? { note: dto.note } : {}),
-        ...(dto.visitId !== undefined ? { visitId: dto.visitId } : {}),
+      },
+      include: {
+        patient: {
+          select: { id: true, fullName: true, patientCode: true, phone: true },
+        },
       },
     });
   }
