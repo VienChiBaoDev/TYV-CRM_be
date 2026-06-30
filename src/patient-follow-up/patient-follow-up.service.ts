@@ -87,15 +87,20 @@ export class PatientFollowUpService {
   }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
     const page = params.page ?? DEFAULT_PAGE;
     const limit = params.limit ?? DEFAULT_LIMIT;
+    const today = startOfTodayUtc();
     const rows = await this.prisma.patientFollowUp.findMany({
       where: {
         completedVisitId: null,
+        assessmentResult: null,
         /** Đến hạn assessmentDate */
         assessmentDate: {
           lte: endOfTodayUtc(), // Ngày assessment <= ngày hôm nay
         },
         /** Tại cơ sở */
         ...(params.branch ? { facility: params.branch } : {}),
+        followUpDate: {
+          gte: today, // chưa quá hạn tái khám — đối xứng với findUpcoming
+        },
       },
       include: followUpInclude,
       orderBy: {
