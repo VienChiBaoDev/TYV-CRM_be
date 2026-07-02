@@ -66,7 +66,7 @@ export class MedicineService {
     const [rows, total] = await Promise.all([
       this.prisma.medicine.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
         skip,
         take: limit,
       }),
