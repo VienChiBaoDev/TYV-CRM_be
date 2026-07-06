@@ -23,6 +23,9 @@ model Staff {
   visitsUpdated    MedicalVisit[]    @relation("VisitUpdatedBy")
   followUpsCreated PatientFollowUp[] @relation("FollowUpCreatedBy")
   followUpsUpdated PatientFollowUp[] @relation("FollowUpUpdatedBy")
+  consultantServiceRecords PatientServiceRecord[] @relation("PatientServiceConsultant")
+  telesaleServiceRecords  PatientServiceRecord[] @relation("PatientServiceTelesale")
+  finalizedServiceRecords PatientServiceRecord[] @relation("PatientServiceFinalizedBy")
 
   @@index([role])
   @@index([clinicBranch])
@@ -52,8 +55,9 @@ model Patient {
   appointments     Appointment[]
   visits           MedicalVisit[]
   followUps        PatientFollowUp[]
-  referrer         Referrer?         @relation(fields: [referrerId], references: [id])
+  referrer         Referrer?              @relation(fields: [referrerId], references: [id])
   treatmentPlans   TreatmentPlan[]
+  serviceRecords   PatientServiceRecord[]
 
   @@index([fullName])
   @@index([phone])
@@ -267,7 +271,8 @@ model CatalogService {
   note           String?
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  group          ServiceGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  group               ServiceGroup           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  patientServiceRecords PatientServiceRecord[]
   @@index([groupId])
   @@index([status])
   @@index([itemType])
@@ -286,6 +291,46 @@ model Medicine {
   @@index([name])
   @@index([unit])
   @@map("medicines")
+}
+
+/// Dịch vụ của mỗi bệnh nhân
+model PatientServiceRecord {
+  id                String   @id @default(uuid()) @db.Uuid
+  patientId         String   @map("patient_id") @db.Uuid
+  catalogServiceId  String   @map("catalog_service_id") @db.Uuid
+  serviceCode       String   @map("service_code")
+  serviceName       String   @map("service_name")
+
+  consultantId      String   @map("consultant_id") @db.Uuid
+  telesaleId        String?  @map("telesale_id") @db.Uuid
+  finalizedById     String   @map("finalized_by_id") @db.Uuid
+
+  unitPrice         Decimal  @map("unit_price") @db.Decimal(12, 2)
+  vatPercent        Decimal  @map("vat_percent") @db.Decimal(5, 2)
+  vatAmount         Decimal  @map("vat_amount") @db.Decimal(12, 2)
+  unitPriceAfterVat Decimal  @map("unit_price_after_vat") @db.Decimal(12, 2)
+  quantity          Int
+  discount          Decimal  @default(0) @db.Decimal(12, 2)
+  finalAmount       Decimal  @map("final_amount") @db.Decimal(12, 2)
+  listPrice         Decimal? @map("list_price") @db.Decimal(12, 2)
+
+  completedSessions Int      @default(0) @map("completed_sessions")
+  treatmentCount    Int      @default(0) @map("treatment_count")
+  expiryDate        DateTime? @map("expiry_date") @db.Date
+  note              String?
+
+  finalizedAt       DateTime @default(now()) @map("finalized_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient        Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  catalogService CatalogService @relation(fields: [catalogServiceId], references: [id], onDelete: Restrict)
+  consultant     Staff          @relation("PatientServiceConsultant", fields: [consultantId], references: [id])
+  telesale       Staff?         @relation("PatientServiceTelesale", fields: [telesaleId], references: [id])
+  finalizedBy    Staff          @relation("PatientServiceFinalizedBy", fields: [finalizedById], references: [id])
+
+  @@index([patientId, finalizedAt(sort: Desc)])
+  @@map("patient_service_records")
 }
 
 enum ClinicalImageCategory {

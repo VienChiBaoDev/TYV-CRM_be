@@ -20,6 +20,7 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { MedicineModule } from './medicine/medicine.module';
+import { PatientServiceModule } from './patient-service/patient-service.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { MedicineModule } from './medicine/medicine.module';
     AppointmentModule,
     StaffModule,
     MedicineModule,
+    PatientServiceModule,
   ],
   controllers: [AppController],
   providers: [
