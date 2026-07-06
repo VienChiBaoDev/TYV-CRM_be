@@ -89,6 +89,23 @@ export class PatientServiceService {
     return mapPatientServiceToResponse(created);
   }
 
+  // Xóa dịch vụ của bệnh nhân
+  async delete(patientId: string, serviceId: string): Promise<void> {
+    await this.ensurePatientExists(patientId);
+
+    const service = await this.prisma.patientServiceRecord.findFirst({
+      where: { id: serviceId, patientId },
+      select: { id: true },
+    });
+    if (!service) {
+      throw new NotFoundException('Dịch vụ không tồn tại');
+    }
+
+    await this.prisma.patientServiceRecord.delete({
+      where: { id: serviceId },
+    });
+  }
+
   private async ensurePatientExists(patientId: string): Promise<void> {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
