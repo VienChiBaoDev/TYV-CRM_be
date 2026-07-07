@@ -6,11 +6,16 @@ import {
   PatientServiceResponse,
   mapPatientServiceToResponse,
 } from './mappers/patient-service.mapper';
+import { UpdatePatientServiceDto } from './dto/update-patient-service.dto';
 
+// recordInclude là một object chứa các thuộc tính của bảng patient_service_record
+// select: { fullName: true } là một object chứa các thuộc tính của bảng staff
+// finalizedBy là một object chứa các thuộc tính của bảng staff
+// consultant là một object chứa các thuộc tính của bảng staff
 const recordInclude = {
   consultant: { select: { fullName: true } },
   finalizedBy: { select: { fullName: true } },
-  // satisfies để đảm bảo rằng recordInclude là một Prisma.PatientServiceRecordInclude
+  catalogService: { select: { groupId: true } },
 } satisfies Prisma.PatientServiceRecordInclude;
 
 @Injectable()
@@ -104,6 +109,91 @@ export class PatientServiceService {
     await this.prisma.patientServiceRecord.delete({
       where: { id: serviceId },
     });
+  }
+
+  async update(
+    patientId: string,
+    serviceId: string,
+    dto: UpdatePatientServiceDto,
+  ): Promise<PatientServiceResponse> {
+    await this.ensurePatientExists(patientId);
+
+    const existing = await this.prisma.patientServiceRecord.findFirst({
+      where: { id: serviceId, patientId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Dịch vụ không tồn tại');
+    }
+
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('Không có dữ liệu cập nhật');
+    }
+
+    let catalogServiceId = existing.catalogServiceId;
+    let serviceCode = existing.serviceCode;
+    let serviceName = existing.serviceName;
+
+    if (dto.catalogServiceId !== undefined) {
+      const catalog = await this.prisma.catalogService.findUnique({
+        where: { id: dto.catalogServiceId },
+      });
+      if (!catalog || catalog.status !== CatalogServiceStatus.ACTIVE) {
+        throw new BadRequestException('Dịch vụ không tồn tại hoặc không hoạt động');
+      }
+      catalogServiceId = catalog.id;
+      serviceCode = catalog.code;
+      serviceName = catalog.name;
+    }
+
+    if (dto.consultantId !== undefined) {
+      await this.ensureStaffExists(dto.consultantId, 'Người tư vấn');
+    }
+    if (dto.telesaleId !== undefined && dto.telesaleId) {
+      await this.ensureStaffExists(dto.telesaleId, 'Telesale');
+    }
+
+    const unitPriceAfterVat = dto.unitPriceAfterVat ?? Number(existing.unitPriceAfterVat);
+    const quantity = dto.quantity ?? existing.quantity;
+    if (quantity < existing.completedSessions) {
+      throw new BadRequestException(
+        'Số lượng không được nhỏ hơn số buổi đã sử dụng',
+      );
+    }
+    const discount = dto.discount ?? Number(existing.discount);
+    const subtotal = unitPriceAfterVat * quantity;
+    // finalAmount là tổng tiền sau khi giảm giá
+    const finalAmount = Math.max(0, subtotal - discount);
+    // listPrice là tổng tiền trước khi giảm giá
+    const listPrice = discount > 0 ? subtotal : null;
+
+    const updated = await this.prisma.patientServiceRecord.update({
+      where: { id: serviceId },
+      data: {
+        ...(dto.catalogServiceId !== undefined && {
+          catalogServiceId,
+          serviceCode,
+          serviceName,
+        }),
+        ...(dto.consultantId !== undefined && { consultantId: dto.consultantId }),
+        ...(dto.telesaleId !== undefined && { telesaleId: dto.telesaleId || null }),
+        ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
+        ...(dto.vatPercent !== undefined && { vatPercent: dto.vatPercent }),
+        ...(dto.vatAmount !== undefined && { vatAmount: dto.vatAmount }),
+        ...(dto.unitPriceAfterVat !== undefined && { unitPriceAfterVat: dto.unitPriceAfterVat }),
+        ...(dto.quantity !== undefined && { quantity: dto.quantity }),
+        ...(dto.discount !== undefined && { discount: dto.discount }),
+        ...(dto.treatmentCount !== undefined && { treatmentCount: dto.treatmentCount }),
+        ...(dto.expiryDate !== undefined && {
+          expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
+        }),
+        ...(dto.note !== undefined && { note: dto.note.trim() || null }),
+        finalAmount,
+        listPrice,
+      },
+      include: recordInclude,
+    });
+
+    return mapPatientServiceToResponse(updated);
   }
 
   private async ensurePatientExists(patientId: string): Promise<void> {

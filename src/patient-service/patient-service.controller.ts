@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -14,6 +15,7 @@ import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import { PatientServiceResponse } from './mappers/patient-service.mapper';
 import { PatientServiceService } from './patient-service.service';
+import { UpdatePatientServiceDto } from './dto/update-patient-service.dto';
 
 @Controller('patients/:patientId/services')
 export class PatientServiceController {
@@ -35,11 +37,24 @@ export class PatientServiceController {
 
   // Xóa dịch vụ của bệnh nhân
   @Delete(':serviceId')
+  // http code 204 là không có nội dung
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
   ): Promise<void> {
     return this.patientServiceService.delete(patientId, serviceId);
+  }
+
+  // Cập nhật dịch vụ của bệnh nhân
+  @Patch(':serviceId')
+  update(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Body() dto: UpdatePatientServiceDto,
+    // Khi nào có trường người cập nhập cuối cùng ở bảng patient_service_record thì sử dụng @CurrentUser() user: JwtPayloadUser
+    // @CurrentUser() user: JwtPayloadUser,
+  ): Promise<PatientServiceResponse> {
+    return this.patientServiceService.update(patientId, serviceId, dto);
   }
 }

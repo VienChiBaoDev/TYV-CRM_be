@@ -1,8 +1,10 @@
 import type { PatientServiceRecord, Prisma, Staff } from '@prisma/client';
+import { formatDateOnly } from '../../medical-visit/mappers/visit.mapper';
 
-type PatientServiceRecordWithStaff = PatientServiceRecord & {
+type PatientServiceRecordWithRelations = PatientServiceRecord & {
   consultant: Pick<Staff, 'fullName'>;
   finalizedBy: Pick<Staff, 'fullName'>;
+  catalogService: { groupId: string };
 };
 
 export interface PatientServicePersonResponse {
@@ -19,6 +21,21 @@ export interface PatientServiceAmountResponse {
   readonly finalAmount: number;
 }
 
+export interface PatientServiceFormDataResponse {
+  readonly consultantId: string;
+  readonly telesaleId: string | null;
+  readonly groupId: string;
+  readonly catalogServiceId: string;
+  readonly unitPrice: number;
+  readonly vatPercent: number;
+  readonly vatAmount: number;
+  readonly unitPriceAfterVat: number;
+  readonly quantity: number;
+  readonly discount: number;
+  readonly treatmentCount: number;
+  readonly expiryDate: string | null;
+}
+
 export interface PatientServiceResponse {
   readonly id: string;
   readonly serviceCode: string;
@@ -32,6 +49,7 @@ export interface PatientServiceResponse {
   readonly note: string;
   readonly finalizedBy: PatientServicePersonResponse;
   readonly finalizedAt: string;
+  readonly form: PatientServiceFormDataResponse;
 }
 
 function toNumber(value: Prisma.Decimal): number {
@@ -63,8 +81,27 @@ function mapPerson(staff: Pick<Staff, 'fullName'>): PatientServicePersonResponse
 }
 
 // Map dịch vụ cho bệnh nhân
+function mapFormData(
+  record: PatientServiceRecordWithRelations,
+): PatientServiceFormDataResponse {
+  return {
+    consultantId: record.consultantId,
+    telesaleId: record.telesaleId,
+    groupId: record.catalogService.groupId,
+    catalogServiceId: record.catalogServiceId,
+    unitPrice: toNumber(record.unitPrice),
+    vatPercent: toNumber(record.vatPercent),
+    vatAmount: toNumber(record.vatAmount),
+    unitPriceAfterVat: toNumber(record.unitPriceAfterVat),
+    quantity: record.quantity,
+    discount: toNumber(record.discount),
+    treatmentCount: record.treatmentCount,
+    expiryDate: record.expiryDate ? formatDateOnly(record.expiryDate) : null,
+  };
+}
+
 export function mapPatientServiceToResponse(
-  record: PatientServiceRecordWithStaff,
+  record: PatientServiceRecordWithRelations,
 ): PatientServiceResponse {
   const finalAmount = toNumber(record.finalAmount);
   const discount = toNumber(record.discount);
@@ -95,5 +132,6 @@ export function mapPatientServiceToResponse(
     note: record.note ?? '',
     finalizedBy: mapPerson(record.finalizedBy),
     finalizedAt: formatFinalizedAt(record.finalizedAt),
+    form: mapFormData(record),
   };
 }
