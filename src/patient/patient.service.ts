@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClinicBranch, CustomerStatus, Prisma } from '@prisma/client';
+import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/patient.mapper';
@@ -41,7 +42,7 @@ export class PatientService {
         clinicBranch: dto.clinicBranch ?? ClinicBranch.HANG_BONG,
         customerStatus: CustomerStatus.LEAD,
         referrerId: dto.referrerId,
-        avatarInitials: this.buildInitials(dto.fullName),
+        avatarInitials: buildInitials(dto.fullName),
       },
     });
   }
@@ -109,12 +110,5 @@ export class PatientService {
     }
     // Cực hiếm: rơi vào đây khi nhiều bản ghi trùng — dùng timestamp đảm bảo duy nhất.
     return `TYV${Date.now()}`;
-  }
-
-  private buildInitials(fullName: string): string {
-    const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 }

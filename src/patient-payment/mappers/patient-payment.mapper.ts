@@ -1,4 +1,9 @@
 import { PaymentMethod, Prisma } from '@prisma/client';
+import {
+  buildInitials,
+  decimalToNumber,
+  formatDisplayDate,
+} from '../../common/mapper-utils';
 // type PaymentWithRelations là để tạo type cho dữ liệu của bảng patient_payment
 // processedBy là để include dữ liệu từ bảng staff
 // lines là để include dữ liệu từ bảng patient_payment_line
@@ -37,25 +42,6 @@ export interface PatientPaymentsListResponse {
   readonly summary: PatientPaymentSummaryResponse;
   readonly payments: PatientPaymentResponse[];
 }
-// chuyển đổi số thành số
-function toNumber(value: Prisma.Decimal): number {
-  return Number(value);
-}
-// chuyển đổi tên thành chữ cái đầu tiên
-function buildInitials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
-}
-// chuyển đổi ngày thành ngày tháng năm
-function formatVoucherDate(date: Date): string {
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
-}
-// chuyển đổi phương thức thanh toán thành tên
 const PAYMENT_DETAIL_LABELS: Record<string, string> = {
   mb: 'MB Bank - Đặng Hữu Phúc',
   vcb: 'Vietcombank',
@@ -78,15 +64,15 @@ export function mapPatientPaymentToResponse(payment: PaymentWithRelations): Pati
   return {
     id: payment.id,
     voucherCode: payment.voucherCode,
-    voucherDate: formatVoucherDate(payment.createdAt),
+    voucherDate: formatDisplayDate(payment.createdAt),
     processedBy: {
       name: payment.processedBy.fullName,
       initials: buildInitials(payment.processedBy.fullName),
     },
     paymentMethod: formatPaymentMethodLabel(payment.paymentMethod, payment.paymentDetail),
-    totalAmount: toNumber(payment.totalAmount),
+    totalAmount: decimalToNumber(payment.totalAmount),
     details: payment.lines.map((line) => ({
-      amount: toNumber(line.amount),
+      amount: decimalToNumber(line.amount),
       serviceCode: line.serviceCode,
       serviceName: line.serviceName,
     })),
