@@ -7,6 +7,7 @@ import {
   PatientPaymentsListResponse,
 } from './mappers/patient-payment.mapper';
 import { PatientPaymentService } from './patient-payment.service';
+import { CreatePatientRefundDto } from './dto/create-patient-refund.dto';
 
 // thanh toán của một bệnh nhân
 @Controller('patients/:patientId/payments')
@@ -30,5 +31,15 @@ export class PatientPaymentController {
     @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientPaymentResponse> {
     return this.patientPaymentService.create(patientId, dto, user.id);
+  }
+
+  // tạo hoàn trả thanh toán
+  @Post('refunds')
+  createRefund(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @Body() dto: CreatePatientRefundDto,
+    @CurrentUser() user: JwtPayloadUser,
+  ): Promise<PatientPaymentResponse> {
+    return this.patientPaymentService.createRefund(patientId, dto, user.id);
   }
 }

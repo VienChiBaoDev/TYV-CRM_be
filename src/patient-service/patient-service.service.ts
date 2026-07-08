@@ -100,10 +100,21 @@ export class PatientServiceService {
 
     const service = await this.prisma.patientServiceRecord.findFirst({
       where: { id: serviceId, patientId },
-      select: { id: true },
+      select: {
+        id: true,
+        paidAmount: true,
+        _count: { select: { paymentLines: true } },
+      },
     });
+
     if (!service) {
       throw new NotFoundException('Dịch vụ không tồn tại');
+    }
+
+    if (service._count.paymentLines > 0 || Number(service.paidAmount) > 0) {
+      throw new BadRequestException(
+        'Dịch vụ đã có phiếu thanh toán, không thể xóa. Vui lòng hoàn tiền trước nếu cần.',
+      );
     }
 
     await this.prisma.patientServiceRecord.delete({
@@ -155,9 +166,7 @@ export class PatientServiceService {
     const unitPriceAfterVat = dto.unitPriceAfterVat ?? Number(existing.unitPriceAfterVat);
     const quantity = dto.quantity ?? existing.quantity;
     if (quantity < existing.completedSessions) {
-      throw new BadRequestException(
-        'Số lượng không được nhỏ hơn số buổi đã sử dụng',
-      );
+      throw new BadRequestException('Số lượng không được nhỏ hơn số buổi đã sử dụng');
     }
     const discount = dto.discount ?? Number(existing.discount);
     const subtotal = unitPriceAfterVat * quantity;
