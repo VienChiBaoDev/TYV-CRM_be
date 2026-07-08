@@ -10,6 +10,11 @@ import {
 } from './mappers/patient-payment.mapper';
 import { getMaxRefundable } from './patient-refund.rules';
 import { CreatePatientRefundDto, REFUND_REASON } from './dto/create-patient-refund.dto';
+import { PATIENT_SERVICE_BLOCKED_ACTION } from '../patient-service/patient-service-action.constants';
+import {
+  assertPatientServiceIsActive,
+  cancelPatientServiceRecord,
+} from '../patient-service/patient-service-cancel.util';
 
 // chọn dữ liệu thanh toán để hiển thị
 const paymentInclude = {
@@ -73,6 +78,7 @@ export class PatientPaymentService {
       // kiểm tra số tiền thanh toán có hợp lệ không
       for (const item of dto.items) {
         const service = serviceMap.get(item.patientServiceRecordId)!;
+        assertPatientServiceIsActive(service, PATIENT_SERVICE_BLOCKED_ACTION.COLLECT_PAYMENT);
         // unpaid: số tiền chưa thanh toán
         const unpaid = Number(service.finalAmount) - Number(service.paidAmount);
         if (item.amount <= 0 || item.amount > unpaid) {
@@ -153,7 +159,7 @@ export class PatientPaymentService {
 
       for (const item of dto.items) {
         const service = serviceMap.get(item.patientServiceRecordId)!;
-        // Kết quả trả ra: service = { id: serviceId1, serviceName: 'Dịch vụ 1', finalAmount: 100000, paidAmount: 50000, completedSessions: 2, quantity: 10 }
+        assertPatientServiceIsActive(service, PATIENT_SERVICE_BLOCKED_ACTION.REFUND);
         const maxRefund = getMaxRefundable(service);
         if (item.amount <= 0 || item.amount > maxRefund) {
           throw new BadRequestException(
@@ -204,7 +210,9 @@ export class PatientPaymentService {
           where: { id: item.patientServiceRecordId },
           data: { paidAmount: { decrement: item.amount } },
         });
-        // V1: lockService → bỏ qua hoặc update note
+        if (item.lockService) {
+          await cancelPatientServiceRecord(tx, item.patientServiceRecordId, processedById);
+        }
       }
 
       return mapPatientPaymentToResponse(payment);

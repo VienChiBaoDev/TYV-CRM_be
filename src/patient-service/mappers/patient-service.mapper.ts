@@ -1,4 +1,4 @@
-import type { PatientServiceRecord, Staff } from '@prisma/client';
+import type { PatientServiceRecord, PatientServiceStatus, Staff } from '@prisma/client';
 import {
   buildInitials,
   decimalToNumber,
@@ -10,6 +10,7 @@ type PatientServiceRecordWithRelations = PatientServiceRecord & {
   consultant: Pick<Staff, 'fullName'>;
   finalizedBy: Pick<Staff, 'fullName'>;
   catalogService: { groupId: string };
+  _count?: { paymentLines: number };
 };
 
 export interface PatientServicePersonResponse {
@@ -45,6 +46,9 @@ export interface PatientServiceFormDataResponse {
 
 export interface PatientServiceResponse {
   readonly id: string;
+  readonly status: PatientServiceStatus;
+  readonly cancelledAt: string | null;
+  readonly hasPaymentHistory: boolean;
   readonly serviceCode: string;
   readonly serviceName: string;
   readonly progress: {
@@ -110,6 +114,9 @@ export function mapPatientServiceToResponse(
 
   return {
     id: record.id,
+    status: record.status,
+    cancelledAt: record.cancelledAt ? formatDisplayDatetime(record.cancelledAt) : null,
+    hasPaymentHistory: (record._count?.paymentLines ?? 0) > 0,
     serviceCode: record.serviceCode,
     serviceName: record.serviceName,
     progress: {

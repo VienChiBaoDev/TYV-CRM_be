@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CatalogServiceStatus, Prisma } from '@prisma/client';
+import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import {
@@ -7,6 +7,11 @@ import {
   mapPatientServiceToResponse,
 } from './mappers/patient-service.mapper';
 import { UpdatePatientServiceDto } from './dto/update-patient-service.dto';
+import { PATIENT_SERVICE_BLOCKED_ACTION } from './patient-service-action.constants';
+import {
+  assertPatientServiceIsActive,
+  cancelPatientServiceRecord,
+} from './patient-service-cancel.util';
 
 // recordInclude là một object chứa các thuộc tính của bảng patient_service_record
 // select: { fullName: true } là một object chứa các thuộc tính của bảng staff
@@ -16,6 +21,7 @@ const recordInclude = {
   consultant: { select: { fullName: true } },
   finalizedBy: { select: { fullName: true } },
   catalogService: { select: { groupId: true } },
+  _count: { select: { paymentLines: true } },
 } satisfies Prisma.PatientServiceRecordInclude;
 
 @Injectable()
@@ -113,12 +119,39 @@ export class PatientServiceService {
 
     if (service._count.paymentLines > 0 || Number(service.paidAmount) > 0) {
       throw new BadRequestException(
-        'Dịch vụ đã có phiếu thanh toán, không thể xóa. Vui lòng hoàn tiền trước nếu cần.',
+        'Dịch vụ đã có phiếu thanh toán, không thể xóa. Vui lòng hoàn tiền và hủy dịch vụ.',
       );
     }
 
     await this.prisma.patientServiceRecord.delete({
       where: { id: serviceId },
+    });
+  }
+
+  async cancel(
+    patientId: string,
+    serviceId: string,
+    cancelledById: string,
+  ): Promise<PatientServiceResponse> {
+    await this.ensurePatientExists(patientId);
+
+    const service = await this.prisma.patientServiceRecord.findFirst({
+      where: { id: serviceId, patientId },
+    });
+    if (!service) {
+      throw new NotFoundException('Dịch vụ không tồn tại');
+    }
+    if (service.status === PatientServiceStatus.CANCELLED) {
+      throw new BadRequestException('Dịch vụ đã được hủy');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await cancelPatientServiceRecord(tx, serviceId, cancelledById);
+      const updated = await tx.patientServiceRecord.findUniqueOrThrow({
+        where: { id: serviceId },
+        include: recordInclude,
+      });
+      return mapPatientServiceToResponse(updated);
     });
   }
 
@@ -135,6 +168,7 @@ export class PatientServiceService {
     if (!existing) {
       throw new NotFoundException('Dịch vụ không tồn tại');
     }
+    assertPatientServiceIsActive(existing, PATIENT_SERVICE_BLOCKED_ACTION.UPDATE);
 
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('Không có dữ liệu cập nhật');

@@ -26,7 +26,8 @@ model Staff {
   consultantServiceRecords PatientServiceRecord[] @relation("PatientServiceConsultant")
   telesaleServiceRecords  PatientServiceRecord[] @relation("PatientServiceTelesale")
   finalizedServiceRecords PatientServiceRecord[] @relation("PatientServiceFinalizedBy")
-  
+  cancelledServiceRecords PatientServiceRecord[] @relation("PatientServiceCancelledBy")
+
   processedPayments PatientPayment[] @relation("PaymentProcessedBy")
   
   @@index([role])
@@ -334,10 +335,21 @@ model PatientServiceRecord {
   finalizedBy    Staff          @relation("PatientServiceFinalizedBy", fields: [finalizedById], references: [id])
 
   paidAmount  Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status      PatientServiceStatus @default(ACTIVE)
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById String? @map("cancelled_by_id") @db.Uuid
   paymentLines PatientPaymentLine[]
 
+  cancelledBy Staff? @relation("PatientServiceCancelledBy", fields: [cancelledById], references: [id])
+
   @@index([patientId, finalizedAt(sort: Desc)])
+  @@index([patientId, status])
   @@map("patient_service_records")
+}
+
+enum PatientServiceStatus {
+  ACTIVE
+  CANCELLED
 }
 
 /// Phiếu thu thanh toán của bệnh nhân
