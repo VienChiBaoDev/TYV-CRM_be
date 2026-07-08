@@ -29,6 +29,8 @@ model Staff {
   cancelledServiceRecords PatientServiceRecord[] @relation("PatientServiceCancelledBy")
 
   processedPayments PatientPayment[] @relation("PaymentProcessedBy")
+
+  followUpsRescheduled PatientFollowUp[] @relation("FollowUpRescheduledBy")
   
   @@index([role])
   @@index([clinicBranch])
@@ -204,6 +206,16 @@ model PatientFollowUp {
   patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id])
 
+
+  rescheduledFollowUpDate DateTime? @map("rescheduled_follow_up_date") @db.Date
+  rescheduleNote          String?   @map("reschedule_note")
+  rescheduledAt           DateTime? @map("rescheduled_at") @db.Timestamptz(6)
+  rescheduledById         String?   @map("rescheduled_by_id") @db.Uuid
+  scheduledAppointmentId  String?   @unique @map("scheduled_appointment_id") @db.Uuid
+
+  rescheduledBy           Staff?       @relation("FollowUpRescheduledBy", fields: [rescheduledById], references: [id])
+  scheduledAppointment    Appointment? @relation("FollowUpScheduledAppointment", fields: [scheduledAppointmentId], references: [id])
+
   @@index([followUpDate, scheduleStatus])
   @@index([assessmentDate, assessmentResult])
   @@index([patientId])
@@ -225,6 +237,8 @@ model Appointment {
   createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  followUpScheduled PatientFollowUp? @relation("FollowUpScheduledAppointment")
 
   @@index([patientId])
   @@index([scheduledAt])
