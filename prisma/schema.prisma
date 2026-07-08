@@ -364,6 +364,11 @@ model PatientPayment {
 }
 
 /// Chi tiết từng dòng trong phiếu thu
+/// Patient Payment Line là để tạo dữ liệu cho bảng patient_payment_line
+/// bảng này là bảng liên kết giữa patient_payment và patient_service_record
+/// ví dụ: một hóa đơn có nhiều dịch vụ, mỗi dịch vụ có một id riêng biệt
+/// nên ta cần tạo dữ liệu cho bảng này
+/// đây là bảng này sẽ được tạo khi tạo hóa đơn, hiển thị dữ liệu dịch vụ trong hóa đơn
 model PatientPaymentLine {
   id                     String  @id @default(uuid()) @db.Uuid
   paymentId              String  @map("payment_id") @db.Uuid

@@ -19,6 +19,8 @@ export interface PatientServiceAmountResponse {
     readonly percent: number;
   };
   readonly finalAmount: number;
+  readonly paidAmount: number;
+  readonly unpaidAmount: number;
 }
 
 export interface PatientServiceFormDataResponse {
@@ -81,9 +83,7 @@ function mapPerson(staff: Pick<Staff, 'fullName'>): PatientServicePersonResponse
 }
 
 // Map dịch vụ cho bệnh nhân
-function mapFormData(
-  record: PatientServiceRecordWithRelations,
-): PatientServiceFormDataResponse {
+function mapFormData(record: PatientServiceRecordWithRelations): PatientServiceFormDataResponse {
   return {
     consultantId: record.consultantId,
     telesaleId: record.telesaleId,
@@ -106,6 +106,8 @@ export function mapPatientServiceToResponse(
   const finalAmount = toNumber(record.finalAmount);
   const discount = toNumber(record.discount);
   const listPrice = record.listPrice != null ? toNumber(record.listPrice) : undefined;
+  const paidAmount = toNumber(record.paidAmount);
+  const unpaidAmount = Math.max(0, finalAmount - paidAmount);
 
   const amount: PatientServiceAmountResponse =
     discount > 0 && listPrice != null
@@ -116,8 +118,10 @@ export function mapPatientServiceToResponse(
             percent: listPrice > 0 ? Math.round((discount / listPrice) * 100) : 0,
           },
           finalAmount,
+          paidAmount,
+          unpaidAmount,
         }
-      : { finalAmount };
+      : { finalAmount, paidAmount, unpaidAmount };
 
   return {
     id: record.id,

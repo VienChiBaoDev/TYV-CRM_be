@@ -1,0 +1,156 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PaymentMethod, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreatePatientPaymentDto, PATIENT_PAYMENT_METHOD } from './dto/create-patient-payment.dto';
+import {
+  mapPatientPaymentToResponse,
+  mapPaymentSummary,
+  PatientPaymentResponse,
+  PatientPaymentsListResponse,
+} from './mappers/patient-payment.mapper';
+
+// chọn dữ liệu thanh toán để hiển thị
+const paymentInclude = {
+  processedBy: { select: { fullName: true } },
+  lines: true,
+} satisfies Prisma.PatientPaymentInclude;
+
+// dịch vụ thanh toán
+@Injectable()
+export class PatientPaymentService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  // tìm tất cả thanh toán của một bệnh nhân
+  async findAllByPatient(patientId: string): Promise<PatientPaymentsListResponse> {
+    await this.ensurePatientExists(patientId);
+
+    const [payments, aggregate] = await Promise.all([
+      this.prisma.patientPayment.findMany({
+        where: { patientId },
+        include: paymentInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+      // aggregate tổng số tiền thanh toán của một bệnh nhân
+      this.prisma.patientServiceRecord.aggregate({
+        where: { patientId },
+        _sum: { finalAmount: true, paidAmount: true },
+      }),
+    ]);
+    // servicesTotal: tổng số tiền dịch vụ
+    // paidTotal: tổng số tiền thanh toán
+    const servicesTotal = Number(aggregate._sum.finalAmount ?? 0);
+    const paidTotal = Number(aggregate._sum.paidAmount ?? 0);
+
+    return {
+      summary: mapPaymentSummary(servicesTotal, paidTotal),
+      payments: payments.map(mapPatientPaymentToResponse),
+    };
+  }
+
+  // tạo thanh toán mới
+  async create(
+    patientId: string,
+    dto: CreatePatientPaymentDto,
+    processedById: string,
+  ): Promise<PatientPaymentResponse> {
+    await this.ensurePatientExists(patientId);
+
+    return this.prisma.$transaction(async (tx) => {
+      // serviceIds: danh sách id dịch vụ thanh toán
+      const serviceIds = dto.items.map((item) => item.patientServiceRecordId);
+      // services: danh sách dịch vụ thanh toán
+      const services = await tx.patientServiceRecord.findMany({
+        where: { patientId, id: { in: serviceIds } },
+      });
+
+      if (services.length !== serviceIds.length) {
+        throw new BadRequestException('Một hoặc nhiều dịch vụ không tồn tại');
+      }
+      // serviceMap: map dịch vụ thanh toán
+      const serviceMap = new Map(services.map((service) => [service.id, service]));
+      // kiểm tra số tiền thanh toán có hợp lệ không
+      for (const item of dto.items) {
+        const service = serviceMap.get(item.patientServiceRecordId)!;
+        // unpaid: số tiền chưa thanh toán
+        const unpaid = Number(service.finalAmount) - Number(service.paidAmount);
+        if (item.amount <= 0 || item.amount > unpaid) {
+          throw new BadRequestException(
+            `Số tiền thu không hợp lệ cho dịch vụ ${service.serviceName}`,
+          );
+        }
+      }
+      // tính tổng số tiền thanh toán
+      const totalAmount = dto.items.reduce((sum, item) => sum + item.amount, 0);
+      // voucherCode: mã voucher
+      const voucherCode = await this.generateVoucherCode(tx);
+      // paymentMethod: phương thức thanh toán
+      const paymentMethod =
+        dto.paymentMethod === PATIENT_PAYMENT_METHOD.CASH
+          ? PaymentMethod.CASH
+          : PaymentMethod.BANK_TRANSFER;
+
+      // tạo thanh toán mới
+      const payment = await tx.patientPayment.create({
+        data: {
+          patientId,
+          voucherCode,
+          paymentMethod,
+          paymentDetail: dto.paymentDetail?.trim() || null,
+          bankCode: dto.bankCode?.trim() || null,
+          branch: dto.branch.trim(),
+          content: dto.content?.trim() || null,
+          totalAmount,
+          processedById,
+          ...(dto.createdAt ? { createdAt: new Date(dto.createdAt) } : {}),
+          lines: {
+            create: dto.items.map((item) => {
+              const service = serviceMap.get(item.patientServiceRecordId)!;
+              return {
+                patientServiceRecordId: item.patientServiceRecordId,
+                amount: item.amount,
+                serviceCode: service.serviceCode,
+                serviceName: service.serviceName,
+              };
+            }),
+          },
+        },
+        include: paymentInclude,
+      });
+
+      // cập nhật số tiền thanh toán của dịch vụ
+      for (const item of dto.items) {
+        await tx.patientServiceRecord.update({
+          where: { id: item.patientServiceRecordId },
+          data: { paidAmount: { increment: item.amount } },
+        });
+      }
+      // chuyển đổi dữ liệu thanh toán thành dữ liệu để hiển thị
+      return mapPatientPaymentToResponse(payment);
+    });
+  }
+
+  // tạo mã voucher
+  private async generateVoucherCode(tx: Prisma.TransactionClient): Promise<string> {
+    const now = new Date();
+    const datePart = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('');
+    const prefix = `PTSTYV${datePart}`;
+    const count = await tx.patientPayment.count({
+      where: { voucherCode: { startsWith: prefix } },
+    });
+    return `${prefix}.${count + 1}`;
+  }
+
+  private async ensurePatientExists(patientId: string): Promise<void> {
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { id: true },
+    });
+    if (!patient) {
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
+    }
+  }
+}
