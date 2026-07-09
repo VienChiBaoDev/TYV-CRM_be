@@ -48,6 +48,9 @@ export interface FollowUpScheduleItemResponse {
   readonly scheduleStatus: FollowUpScheduleStatus;
   readonly scheduleStatusFe: number;
   readonly originatingVisitId: string;
+  readonly rescheduledFollowUpDate: string | null;
+  readonly rescheduleNote: string | null;
+  readonly effectiveFollowUpDate: string;
 }
 export interface PendingAssessmentItemResponse {
   readonly id: string;
@@ -69,6 +72,12 @@ type FollowUpWithPatient = PatientFollowUp & {
 type FollowUpWithOriginatingVisit = FollowUpWithPatient & {
   originatingVisit: { visitNumber: number };
 };
+// Tính ngày tái khám hiệu lực (rescheduled hoặc original)
+export function getEffectiveFollowUpDate(
+  row: Pick<PatientFollowUp, 'followUpDate' | 'rescheduledFollowUpDate'>,
+): Date {
+  return row.rescheduledFollowUpDate ?? row.followUpDate;
+}
 
 /** Mỗi bệnh nhân chỉ giữ lịch tái khám từ lần khám mới nhất */
 export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVisit>(
@@ -78,10 +87,7 @@ export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVi
 
   for (const row of rows) {
     const existing = latestByPatient.get(row.patientId);
-    if (
-      !existing ||
-      row.originatingVisit.visitNumber > existing.originatingVisit.visitNumber
-    ) {
+    if (!existing || row.originatingVisit.visitNumber > existing.originatingVisit.visitNumber) {
       latestByPatient.set(row.patientId, row);
     }
   }
@@ -90,6 +96,7 @@ export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVi
 }
 // Dùng cho Bảng 1: Sắp đến hạn tái khám trong N ngày tới (Không có assessment)
 export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleItemResponse {
+  const effective = getEffectiveFollowUpDate(row);
   return {
     id: row.id,
     patientId: row.patientId,
@@ -102,6 +109,13 @@ export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleIte
     scheduleStatus: row.scheduleStatus,
     scheduleStatusFe: SCHEDULE_STATUS_TO_FE[row.scheduleStatus],
     originatingVisitId: row.originatingVisitId,
+    // rescheduledFollowUpDate và rescheduleNote trả về cho FE để hiển thị lịch tái khám đã điều chỉnh
+    rescheduledFollowUpDate: row.rescheduledFollowUpDate
+      ? formatDateOnly(row.rescheduledFollowUpDate)
+      : null,
+    rescheduleNote: row.rescheduleNote,
+    // effectiveFollowUpDate giúp FE không phải tự tính rescheduled ?? original
+    effectiveFollowUpDate: formatDateOnly(effective),
   };
 }
 

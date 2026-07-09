@@ -8,7 +8,10 @@ import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { assertAppointmentStatusTransition, CHECK_IN_ALLOWED_STATUSES } from './appointment-status.rules';
+import {
+  assertAppointmentStatusTransition,
+  CHECK_IN_ALLOWED_STATUSES,
+} from './appointment-status.rules';
 import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
 
 // record để mapping branch với location
@@ -89,23 +92,52 @@ export class AppointmentService {
     const current = await this.findOne(id);
 
     if (dto.scheduledAt && dto.endedAt) {
+      // Kiểm tra giờ bắt đầu và giờ kết thúc có hợp lệ
       this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     } else if (dto.scheduledAt || dto.endedAt) {
+      // Nếu giờ bắt đầu hoặc giờ kết thúc không được cung cấp, sử dụng giờ bắt đầu và giờ kết thúc của lịch hẹn hiện tại
       const scheduledAt = dto.scheduledAt ?? current.scheduledAt.toISOString();
       const endedAt = dto.endedAt ?? current.endedAt.toISOString();
       this.assertValidTimeRange(scheduledAt, endedAt);
     }
 
     if (dto.status) {
-      assertAppointmentStatusTransition(
-        current.status,
-        dto.status,
-        current.visitId,
-      );
+      assertAppointmentStatusTransition(current.status, dto.status, current.visitId);
     }
 
     if (dto.visitId !== undefined) {
       throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
+    }
+
+    const isCancelling = dto.status === AppointmentStatus.CANCELLED;
+
+    if (isCancelling) {
+      return this.prisma.$transaction(async (tx) => {
+        const updated = await tx.appointment.update({
+          where: { id },
+          data: {
+            ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
+            ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
+            ...(dto.doctorName !== undefined ? { doctorName: dto.doctorName } : {}),
+            ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+            status: AppointmentStatus.CANCELLED,
+            ...(dto.note !== undefined ? { note: dto.note } : {}),
+          },
+          include: {
+            patient: {
+              select: { id: true, fullName: true, patientCode: true, phone: true },
+            },
+          },
+        });
+        await tx.patientFollowUp.updateMany({
+          where: { scheduledAppointmentId: id },
+          data: {
+            scheduleStatus: 'NOT_SCHEDULED',
+            scheduledAppointmentId: null,
+          },
+        });
+        return updated;
+      });
     }
 
     return this.prisma.appointment.update({

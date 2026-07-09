@@ -22,6 +22,9 @@ import type { PaginatedResponse } from 'src/common/interfaces/paginated-response
 import { buildPaginatedMeta, paginateArray } from 'src/common/pagination/paginate';
 import { ScheduleFollowUpDto } from './dto/schedule-follow-up.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
+import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
+import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 
 const followUpInclude = {
   patient: {
@@ -57,10 +60,40 @@ export class PatientFollowUpService {
         /** Chưa được khám */
         completedVisitId: null,
         /** Trong N ngày tới */
-        followUpDate: {
-          gte: today, // Ngày khám >= ngày hôm nay
-          lte: endDate, // Ngày khám <= ngày hôm nay + N ngày
-        },
+
+        OR: [
+          // A. Trong cửa sổ N ngày tới
+          {
+            rescheduledFollowUpDate: {
+              not: null,
+              gte: today, // Ngày tái khám >= ngày hôm nay
+              lte: endDate, // Ngày tái khám <= ngày hôm nay + N ngày
+            },
+          },
+          {
+            rescheduledFollowUpDate: null,
+            followUpDate: {
+              gte: today, // Ngày tái khám >= ngày hôm nay
+              lte: endDate, // Ngày tái khám <= ngày hôm nay + N ngày
+            },
+          },
+
+          // B. Quá hạn + chưa đặt lịch
+          {
+            scheduleStatus: 'NOT_SCHEDULED',
+            rescheduledFollowUpDate: {
+              not: null,
+              lt: today,
+            },
+          },
+          {
+            scheduleStatus: 'NOT_SCHEDULED',
+            rescheduledFollowUpDate: null,
+            followUpDate: {
+              lt: today,
+            },
+          },
+        ],
         /** Tại cơ sở */
         ...(branch ? { facility: branch } : {}),
       },
@@ -71,7 +104,7 @@ export class PatientFollowUpService {
     });
     const latestPerPatient = keepLatestFollowUpPerPatient(rows);
     const items = latestPerPatient
-      .sort((a, b) => a.followUpDate.getTime() - b.followUpDate.getTime())
+      .sort((a, b) => getEffectiveFollowUpDate(a).getTime() - getEffectiveFollowUpDate(b).getTime())
       .map(mapToScheduleItem);
 
     return {
@@ -124,11 +157,6 @@ export class PatientFollowUpService {
     body: ScheduleFollowUpDto,
   ): Promise<FollowUpScheduleItemResponse> {
     const followUp = await this.findFollowUpOrThrow(followUpId);
-    // transaction để đảm bảo tính toàn vẹn dữ liệu
-    // Nghĩa là nếu tạo appointment thành công thì mới cập nhật lịch tái khám thành đã đặt lịch
-    // Nếu tạo appointment thất bại thì rollback toàn bộ transaction
-    // Ngược lại nếu cập nhật lịch tái khám thành đã đặt lịch thành công thì commit transaction
-    // Nếu cập nhật lịch tái khám thành đã đặt lịch thất bại thì rollback transaction
     if (followUp.scheduleStatus === 'SCHEDULED') {
       throw new ConflictException('Lịch tái khám đã được đặt lịch');
     }
@@ -143,7 +171,7 @@ export class PatientFollowUpService {
         throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
       }
       //Dùng transaction — nếu tạo appointment lỗi thì không cập nhật scheduleStatus
-      await tx.appointment.create({
+      const appointment = await tx.appointment.create({
         data: {
           patientId: followUp.patientId,
           scheduledAt,
@@ -156,7 +184,7 @@ export class PatientFollowUpService {
       // cập nhật lịch tái khám thành đã đặt lịch
       return tx.patientFollowUp.update({
         where: { id: followUpId },
-        data: { scheduleStatus: 'SCHEDULED' },
+        data: { scheduleStatus: 'SCHEDULED', scheduledAppointmentId: appointment.id },
         include: followUpInclude,
       });
     });
@@ -180,6 +208,35 @@ export class PatientFollowUpService {
       include: followUpInclude,
     });
     return mapToPendingAssessmentItem(updated);
+  }
+
+  async rescheduleFollowUp(
+    followUpId: string,
+    body: RescheduleFollowUpDto,
+    rescheduledById: string,
+  ): Promise<FollowUpScheduleItemResponse> {
+    const followUp = await this.findFollowUpOrThrow(followUpId);
+
+    if (followUp.scheduleStatus === 'SCHEDULED') {
+      throw new ConflictException(
+        'Đã đặt lịch tái khám. Vui lòng hủy lịch hẹn trên lịch trước khi đổi lịch.',
+      );
+    }
+
+    const rescheduledFollowUpDate = parseDateOnly(body.rescheduledFollowUpDate);
+
+    const updated = await this.prisma.patientFollowUp.update({
+      where: { id: followUpId },
+      data: {
+        rescheduledFollowUpDate,
+        rescheduleNote: body.note?.trim() ?? null,
+        rescheduledById,
+        rescheduledAt: new Date(),
+      },
+      // include lịch tái khám đã điều chỉnh
+      include: followUpInclude,
+    });
+    return mapToScheduleItem(updated);
   }
 
   // Kiểm tra lịch tái khám có tồn tại và chưa hoàn thành khám
