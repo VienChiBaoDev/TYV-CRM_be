@@ -112,7 +112,7 @@ export class PatientFollowUpService {
       meta: buildPaginatedMeta(page, limit, items.length),
     };
   }
-  /** Bảng 2: Cần hỏi thăm — đến hạn assessmentDate, chưa có kết quả */
+  /** Bảng 2: Hỏi thăm — đến hạn assessmentDate, cùng quy tắc ẩn/hiện với findUpcoming */
   async findPendingAssessments(params: {
     branch?: ClinicBranch;
     page?: number;
@@ -124,16 +124,41 @@ export class PatientFollowUpService {
     const rows = await this.prisma.patientFollowUp.findMany({
       where: {
         completedVisitId: null,
-        assessmentResult: null,
         /** Đến hạn assessmentDate */
         assessmentDate: {
           lte: endOfTodayUtc(), // Ngày assessment <= ngày hôm nay
         },
+        /** Còn hạn hoặc quá hạn chưa đặt lịch — ẩn khi đã đặt lịch + quá hạn */
+        OR: [
+          {
+            rescheduledFollowUpDate: {
+              not: null,
+              gte: today,
+            },
+          },
+          {
+            rescheduledFollowUpDate: null,
+            followUpDate: {
+              gte: today,
+            },
+          },
+          {
+            scheduleStatus: 'NOT_SCHEDULED',
+            rescheduledFollowUpDate: {
+              not: null,
+              lt: today,
+            },
+          },
+          {
+            scheduleStatus: 'NOT_SCHEDULED',
+            rescheduledFollowUpDate: null,
+            followUpDate: {
+              lt: today,
+            },
+          },
+        ],
         /** Tại cơ sở */
         ...(params.branch ? { facility: params.branch } : {}),
-        followUpDate: {
-          gte: today, // chưa quá hạn tái khám — đối xứng với findUpcoming
-        },
       },
       include: followUpInclude,
       orderBy: {
