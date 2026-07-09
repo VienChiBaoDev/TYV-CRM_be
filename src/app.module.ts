@@ -11,6 +11,7 @@ import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { MedicalCaseModule } from './medical-case/medical-case.module';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { ReferrerModule } from './referrer/referrer.module';
 import { StaffModule } from './staff/staff.module';
@@ -45,6 +46,7 @@ import { PatientServiceModule } from './patient-service/patient-service.module';
     AuthModule,
     PatientModule,
     MedicalVisitModule,
+    MedicalCaseModule,
     PatientFollowUpModule,
     ServiceCatalogModule,
     ReferrerModule,
