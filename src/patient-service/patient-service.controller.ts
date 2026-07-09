@@ -46,6 +46,16 @@ export class PatientServiceController {
     return this.patientServiceService.delete(patientId, serviceId);
   }
 
+  // Hủy dịch vụ (soft delete — giữ lịch sử phiếu thanh toán)
+  @Patch(':serviceId/cancel')
+  cancel(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: JwtPayloadUser,
+  ): Promise<PatientServiceResponse> {
+    return this.patientServiceService.cancel(patientId, serviceId, user.id);
+  }
+
   // Cập nhật dịch vụ của bệnh nhân
   @Patch(':serviceId')
   update(

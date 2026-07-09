@@ -1,10 +1,16 @@
-import type { PatientServiceRecord, Prisma, Staff } from '@prisma/client';
+import type { PatientServiceRecord, PatientServiceStatus, Staff } from '@prisma/client';
+import {
+  buildInitials,
+  decimalToNumber,
+  formatDisplayDatetime,
+} from '../../common/mapper-utils';
 import { formatDateOnly } from '../../medical-visit/mappers/visit.mapper';
 
 type PatientServiceRecordWithRelations = PatientServiceRecord & {
   consultant: Pick<Staff, 'fullName'>;
   finalizedBy: Pick<Staff, 'fullName'>;
   catalogService: { groupId: string };
+  _count?: { paymentLines: number };
 };
 
 export interface PatientServicePersonResponse {
@@ -19,6 +25,8 @@ export interface PatientServiceAmountResponse {
     readonly percent: number;
   };
   readonly finalAmount: number;
+  readonly paidAmount: number;
+  readonly unpaidAmount: number;
 }
 
 export interface PatientServiceFormDataResponse {
@@ -38,6 +46,9 @@ export interface PatientServiceFormDataResponse {
 
 export interface PatientServiceResponse {
   readonly id: string;
+  readonly status: PatientServiceStatus;
+  readonly cancelledAt: string | null;
+  readonly hasPaymentHistory: boolean;
   readonly serviceCode: string;
   readonly serviceName: string;
   readonly progress: {
@@ -52,27 +63,6 @@ export interface PatientServiceResponse {
   readonly form: PatientServiceFormDataResponse;
 }
 
-function toNumber(value: Prisma.Decimal): number {
-  return Number(value);
-}
-// Tạo chữ cái đầu tiên của tên người dùng
-function buildInitials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
-}
-
-// Định dạng ngày tháng năm giờ phút
-function formatFinalizedAt(date: Date): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${hours}:${minutes} ${day}-${month}-${year}`;
-}
-// Map người dùng
 function mapPerson(staff: Pick<Staff, 'fullName'>): PatientServicePersonResponse {
   return {
     name: staff.fullName,
@@ -81,20 +71,18 @@ function mapPerson(staff: Pick<Staff, 'fullName'>): PatientServicePersonResponse
 }
 
 // Map dịch vụ cho bệnh nhân
-function mapFormData(
-  record: PatientServiceRecordWithRelations,
-): PatientServiceFormDataResponse {
+function mapFormData(record: PatientServiceRecordWithRelations): PatientServiceFormDataResponse {
   return {
     consultantId: record.consultantId,
     telesaleId: record.telesaleId,
     groupId: record.catalogService.groupId,
     catalogServiceId: record.catalogServiceId,
-    unitPrice: toNumber(record.unitPrice),
-    vatPercent: toNumber(record.vatPercent),
-    vatAmount: toNumber(record.vatAmount),
-    unitPriceAfterVat: toNumber(record.unitPriceAfterVat),
+    unitPrice: decimalToNumber(record.unitPrice),
+    vatPercent: decimalToNumber(record.vatPercent),
+    vatAmount: decimalToNumber(record.vatAmount),
+    unitPriceAfterVat: decimalToNumber(record.unitPriceAfterVat),
     quantity: record.quantity,
-    discount: toNumber(record.discount),
+    discount: decimalToNumber(record.discount),
     treatmentCount: record.treatmentCount,
     expiryDate: record.expiryDate ? formatDateOnly(record.expiryDate) : null,
   };
@@ -103,9 +91,12 @@ function mapFormData(
 export function mapPatientServiceToResponse(
   record: PatientServiceRecordWithRelations,
 ): PatientServiceResponse {
-  const finalAmount = toNumber(record.finalAmount);
-  const discount = toNumber(record.discount);
-  const listPrice = record.listPrice != null ? toNumber(record.listPrice) : undefined;
+  const finalAmount = decimalToNumber(record.finalAmount);
+  const discount = decimalToNumber(record.discount);
+  const listPrice =
+    record.listPrice != null ? decimalToNumber(record.listPrice) : undefined;
+  const paidAmount = decimalToNumber(record.paidAmount);
+  const unpaidAmount = Math.max(0, finalAmount - paidAmount);
 
   const amount: PatientServiceAmountResponse =
     discount > 0 && listPrice != null
@@ -116,11 +107,16 @@ export function mapPatientServiceToResponse(
             percent: listPrice > 0 ? Math.round((discount / listPrice) * 100) : 0,
           },
           finalAmount,
+          paidAmount,
+          unpaidAmount,
         }
-      : { finalAmount };
+      : { finalAmount, paidAmount, unpaidAmount };
 
   return {
     id: record.id,
+    status: record.status,
+    cancelledAt: record.cancelledAt ? formatDisplayDatetime(record.cancelledAt) : null,
+    hasPaymentHistory: (record._count?.paymentLines ?? 0) > 0,
     serviceCode: record.serviceCode,
     serviceName: record.serviceName,
     progress: {
@@ -131,7 +127,7 @@ export function mapPatientServiceToResponse(
     consultant: mapPerson(record.consultant),
     note: record.note ?? '',
     finalizedBy: mapPerson(record.finalizedBy),
-    finalizedAt: formatFinalizedAt(record.finalizedAt),
+    finalizedAt: formatDisplayDatetime(record.finalizedAt),
     form: mapFormData(record),
   };
 }

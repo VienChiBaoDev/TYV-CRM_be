@@ -22,6 +22,7 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { MedicineModule } from './medicine/medicine.module';
 import { PatientServiceModule } from './patient-service/patient-service.module';
+import { PatientPaymentModule } from './patient-payment/patient-payment.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PatientServiceModule } from './patient-service/patient-service.module';
     StaffModule,
     MedicineModule,
     PatientServiceModule,
+    PatientPaymentModule,
   ],
   controllers: [AppController],
   providers: [

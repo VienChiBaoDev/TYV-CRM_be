@@ -26,8 +26,11 @@ model Staff {
   consultantServiceRecords PatientServiceRecord[] @relation("PatientServiceConsultant")
   telesaleServiceRecords  PatientServiceRecord[] @relation("PatientServiceTelesale")
   finalizedServiceRecords PatientServiceRecord[] @relation("PatientServiceFinalizedBy")
-  
+  cancelledServiceRecords PatientServiceRecord[] @relation("PatientServiceCancelledBy")
+
   processedPayments PatientPayment[] @relation("PaymentProcessedBy")
+
+  followUpsRescheduled PatientFollowUp[] @relation("FollowUpRescheduledBy")
   
   @@index([role])
   @@index([clinicBranch])
@@ -216,6 +219,16 @@ model PatientFollowUp {
   patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id])
 
+
+  rescheduledFollowUpDate DateTime? @map("rescheduled_follow_up_date") @db.Date
+  rescheduleNote          String?   @map("reschedule_note")
+  rescheduledAt           DateTime? @map("rescheduled_at") @db.Timestamptz(6)
+  rescheduledById         String?   @map("rescheduled_by_id") @db.Uuid
+  scheduledAppointmentId  String?   @unique @map("scheduled_appointment_id") @db.Uuid
+
+  rescheduledBy           Staff?       @relation("FollowUpRescheduledBy", fields: [rescheduledById], references: [id])
+  scheduledAppointment    Appointment? @relation("FollowUpScheduledAppointment", fields: [scheduledAppointmentId], references: [id])
+
   @@index([followUpDate, scheduleStatus])
   @@index([assessmentDate, assessmentResult])
   @@index([patientId])
@@ -237,6 +250,8 @@ model Appointment {
   createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  followUpScheduled PatientFollowUp? @relation("FollowUpScheduledAppointment")
 
   @@index([patientId])
   @@index([scheduledAt])
@@ -347,10 +362,21 @@ model PatientServiceRecord {
   finalizedBy    Staff          @relation("PatientServiceFinalizedBy", fields: [finalizedById], references: [id])
 
   paidAmount  Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status      PatientServiceStatus @default(ACTIVE)
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById String? @map("cancelled_by_id") @db.Uuid
   paymentLines PatientPaymentLine[]
 
+  cancelledBy Staff? @relation("PatientServiceCancelledBy", fields: [cancelledById], references: [id])
+
   @@index([patientId, finalizedAt(sort: Desc)])
+  @@index([patientId, status])
   @@map("patient_service_records")
+}
+
+enum PatientServiceStatus {
+  ACTIVE
+  CANCELLED
 }
 
 /// Phiếu thu thanh toán của bệnh nhân
@@ -377,6 +403,11 @@ model PatientPayment {
 }
 
 /// Chi tiết từng dòng trong phiếu thu
+/// Patient Payment Line là để tạo dữ liệu cho bảng patient_payment_line
+/// bảng này là bảng liên kết giữa patient_payment và patient_service_record
+/// ví dụ: một hóa đơn có nhiều dịch vụ, mỗi dịch vụ có một id riêng biệt
+/// nên ta cần tạo dữ liệu cho bảng này
+/// đây là bảng này sẽ được tạo khi tạo hóa đơn, hiển thị dữ liệu dịch vụ trong hóa đơn
 model PatientPaymentLine {
   id                     String  @id @default(uuid()) @db.Uuid
   paymentId              String  @map("payment_id") @db.Uuid
