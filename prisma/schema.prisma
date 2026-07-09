@@ -242,7 +242,8 @@ model Appointment {
   patientId    String            @map("patient_id") @db.Uuid
   scheduledAt  DateTime          @map("scheduled_at") @db.Timestamptz(6)
   endedAt      DateTime          @map("ended_at") @db.Timestamptz(6)
-  doctorName   String?           @map("doctor_name")
+  doctorName     String?           @map("doctor_name")
+  assistantName  String?           @map("assistant_name")
   clinicBranch ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
   status       AppointmentStatus @default(BOOKED)
   note         String?

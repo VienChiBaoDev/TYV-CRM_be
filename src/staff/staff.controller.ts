@@ -22,6 +22,12 @@ import { StaffService } from './staff.service';
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
+  @Get('options')
+  @Roles(StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.ASSISTANT, StaffRole.STAFF)
+  findOptions() {
+    return this.staffService.findActiveOptions();
+  }
+
   @Get()
   findAll() {
     return this.staffService.findAll();

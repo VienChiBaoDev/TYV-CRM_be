@@ -23,6 +23,11 @@ export class UpdateAppointmentDto {
   doctorName?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assistantName?: string;
+
+  @IsOptional()
   @IsEnum(ClinicBranch)
   clinicBranch?: ClinicBranch;
 

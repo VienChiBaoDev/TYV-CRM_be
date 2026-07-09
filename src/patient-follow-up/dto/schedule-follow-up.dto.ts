@@ -16,5 +16,10 @@ export class ScheduleFollowUpDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(255)
+  assistantName?: string;
+
+  @IsOptional()
+  @IsString()
   note?: string;
 }

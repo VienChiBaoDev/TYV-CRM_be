@@ -32,6 +32,20 @@ export class StaffService {
     });
   }
 
+  /** Danh sách nhân sự active cho dropdown — không trả email. */
+  findActiveOptions() {
+    return this.prisma.staff.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        fullName: true,
+        role: true,
+        clinicBranch: true,
+      },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async create(dto: CreateStaffDto) {
     const email = dto.email.toLowerCase().trim();
     await this.ensureEmailAvailable(email);
