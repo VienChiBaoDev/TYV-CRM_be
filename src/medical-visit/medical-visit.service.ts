@@ -33,6 +33,11 @@ const MIME_EXTENSION: Record<string, string> = {
   'image/gif': 'gif',
 };
 
+const TRANSACTION_OPTIONS = {
+  maxWait: 5_000,
+  timeout: 15_000,
+} as const;
+
 const visitInclude = {
   herbs: { orderBy: { sortOrder: 'asc' as const } },
   clinicalImages: { orderBy: { sortOrder: 'asc' as const } },
@@ -87,6 +92,7 @@ export class MedicalVisitService {
           dto.visit.doctorName,
           dto.visit.location,
           dto.followUpPlan,
+          visitNumber,
         );
       }
       // Lấy lần khám mới nhất
@@ -94,7 +100,7 @@ export class MedicalVisitService {
         where: { id: createdVisit.id },
         include: visitInclude,
       });
-    });
+    }, TRANSACTION_OPTIONS);
 
     // Trả về lần khám mới nhất
     return mapVisitToResponse(visit);
@@ -166,6 +172,7 @@ export class MedicalVisitService {
           doctorName,
           location,
           dto.followUpPlan,
+          existing.visitNumber,
         );
       }
 
@@ -173,7 +180,7 @@ export class MedicalVisitService {
         where: { id: visitId },
         include: visitInclude,
       });
-    });
+    }, TRANSACTION_OPTIONS);
 
     return mapVisitToResponse(visit);
   }
@@ -366,6 +373,7 @@ export class MedicalVisitService {
     physicianInCharge: string,
     location: string,
     plan: FollowUpPlanDto,
+    visitNumber: number,
   ): Promise<void> {
     const followUpDate = parseDateOnly(plan.followUpDate);
     const assessmentDate = subtractDays(plan.followUpDate, plan.reminderDaysBefore);
@@ -399,7 +407,12 @@ export class MedicalVisitService {
       });
     }
     // Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới
-    await this.supersedeOlderIncompleteFollowUps(tx, patientId, originatingVisitId);
+    await this.supersedeOlderIncompleteFollowUps(
+      tx,
+      patientId,
+      originatingVisitId,
+      visitNumber,
+    );
 
     await tx.patient.update({
       where: { id: patientId },
@@ -417,20 +430,15 @@ export class MedicalVisitService {
     tx: Prisma.TransactionClient,
     patientId: string,
     originatingVisitId: string,
+    visitNumber: number,
   ): Promise<void> {
-    const currentVisit = await tx.medicalVisit.findUnique({
-      where: { id: originatingVisitId },
-      select: { visitNumber: true },
-    });
-    if (!currentVisit) return;
-
     await tx.patientFollowUp.deleteMany({
       where: {
         patientId,
         completedVisitId: null,
         originatingVisitId: { not: originatingVisitId },
         originatingVisit: {
-          visitNumber: { lt: currentVisit.visitNumber },
+          visitNumber: { lt: visitNumber },
         },
       },
     });
