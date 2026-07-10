@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ClinicBranch } from '@prisma/client';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
 import { PatientService } from './patient.service';
@@ -15,23 +17,28 @@ export class PatientController {
 
   @Get()
   findAll(
+    @CurrentUser() user: JwtPayloadUser,
     @Query('search') search?: string,
     @Query('branch') branch?: ClinicBranch,
     @Query('referrerId') referrerId?: string,
   ) {
-    return this.patientService.findAll({ search, branch, referrerId });
+    return this.patientService.findAll({ search, branch, referrerId }, user);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.patientService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayloadUser,
+  ) {
+    return this.patientService.findOne(id, user);
   }
 
   // Chi tiết mỗi lần khám của khách hàng
   @Get(':patientId/medical-record')
   findMedicalRecord(
     @Param('patientId', ParseUUIDPipe) patientId: string,
+    @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientDetailResponse> {
-    return this.patientService.findMedicalRecord(patientId);
+    return this.patientService.findMedicalRecord(patientId, user);
   }
 }
