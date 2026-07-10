@@ -31,6 +31,10 @@ model Staff {
   processedPayments PatientPayment[] @relation("PaymentProcessedBy")
 
   followUpsRescheduled PatientFollowUp[] @relation("FollowUpRescheduledBy")
+
+  treatmentSessionsAsDoctor      PatientTreatmentSession[] @relation("TreatmentSessionDoctor")
+  treatmentSessionsAsPtKtv       PatientTreatmentSession[] @relation("TreatmentSessionPtKtv")
+  treatmentSessionsAsPerformedBy PatientTreatmentSession[] @relation("TreatmentSessionPerformedBy")
   
   @@index([role])
   @@index([clinicBranch])
@@ -370,9 +374,41 @@ model PatientServiceRecord {
 
   cancelledBy Staff? @relation("PatientServiceCancelledBy", fields: [cancelledById], references: [id])
 
+  treatmentSessions PatientTreatmentSession[]
+
   @@index([patientId, finalizedAt(sort: Desc)])
   @@index([patientId, status])
   @@map("patient_service_records")
+}
+
+model PatientTreatmentSession {
+  id                     String   @id @default(uuid()) @db.Uuid
+  patientServiceRecordId String   @map("patient_service_record_id") @db.Uuid
+  sessionNumber          Int      @map("session_number")
+
+  doctorId               String?  @map("doctor_id") @db.Uuid
+  ptKtvId                String?  @map("pt_ktv_id") @db.Uuid
+  professionalSupport    String?  @map("professional_support")
+
+  treatmentContent       String   @map("treatment_content")
+  note                   String?
+  nextContent            String?  @map("next_content")
+  nextTreatmentDate      DateTime? @map("next_treatment_date") @db.Timestamptz(6)
+
+  performedAt            DateTime @map("performed_at") @db.Timestamptz(6)
+  performedById          String?  @map("performed_by_id") @db.Uuid
+
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patientServiceRecord PatientServiceRecord @relation(fields: [patientServiceRecordId], references: [id], onDelete: Cascade)
+  doctor               Staff? @relation("TreatmentSessionDoctor", fields: [doctorId], references: [id])
+  ptKtv                Staff? @relation("TreatmentSessionPtKtv", fields: [ptKtvId], references: [id])
+  performedBy          Staff? @relation("TreatmentSessionPerformedBy", fields: [performedById], references: [id])
+
+  @@unique([patientServiceRecordId, sessionNumber])
+  @@index([patientServiceRecordId, sessionNumber])
+  @@map("patient_treatment_sessions")
 }
 
 enum PatientServiceStatus {
