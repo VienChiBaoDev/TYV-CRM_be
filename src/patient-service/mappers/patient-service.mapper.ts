@@ -1,10 +1,7 @@
 import type { PatientServiceRecord, PatientServiceStatus, Staff } from '@prisma/client';
-import {
-  buildInitials,
-  decimalToNumber,
-  formatDisplayDatetime,
-} from '../../common/mapper-utils';
+import { buildInitials, decimalToNumber, formatDisplayDatetime } from '../../common/mapper-utils';
 import { formatDateOnly } from '../../medical-visit/mappers/visit.mapper';
+import { getMaxAllowedSession, getSessionTotal } from '../patient-service-session.rules';
 
 type PatientServiceRecordWithRelations = PatientServiceRecord & {
   consultant: Pick<Staff, 'fullName'>;
@@ -54,6 +51,7 @@ export interface PatientServiceResponse {
   readonly progress: {
     readonly current: number;
     readonly total: number;
+    readonly maxAllowed: number;
   };
   readonly amount: PatientServiceAmountResponse;
   readonly consultant: PatientServicePersonResponse;
@@ -93,10 +91,10 @@ export function mapPatientServiceToResponse(
 ): PatientServiceResponse {
   const finalAmount = decimalToNumber(record.finalAmount);
   const discount = decimalToNumber(record.discount);
-  const listPrice =
-    record.listPrice != null ? decimalToNumber(record.listPrice) : undefined;
+  const listPrice = record.listPrice != null ? decimalToNumber(record.listPrice) : undefined;
   const paidAmount = decimalToNumber(record.paidAmount);
   const unpaidAmount = Math.max(0, finalAmount - paidAmount);
+  const sessionTotal = getSessionTotal(record);
 
   const amount: PatientServiceAmountResponse =
     discount > 0 && listPrice != null
@@ -121,7 +119,14 @@ export function mapPatientServiceToResponse(
     serviceName: record.serviceName,
     progress: {
       current: record.completedSessions,
-      total: record.quantity,
+      total: sessionTotal,
+      maxAllowed: getMaxAllowedSession({
+        treatmentCount: record.treatmentCount,
+        quantity: record.quantity,
+        finalAmount: record.finalAmount,
+        paidAmount: record.paidAmount,
+        completedSessions: record.completedSessions,
+      }),
     },
     amount,
     consultant: mapPerson(record.consultant),
