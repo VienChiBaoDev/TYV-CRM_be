@@ -363,9 +363,25 @@ model PatientTreatmentSession {
   ptKtv                Staff? @relation("TreatmentSessionPtKtv", fields: [ptKtvId], references: [id])
   performedBy          Staff? @relation("TreatmentSessionPerformedBy", fields: [performedById], references: [id])
 
+  images PatientTreatmentSessionImage[]
+
   @@unique([patientServiceRecordId, sessionNumber])
   @@index([patientServiceRecordId, sessionNumber])
   @@map("patient_treatment_sessions")
+}
+
+model PatientTreatmentSessionImage {
+  id                        String   @id @default(uuid()) @db.Uuid
+  patientTreatmentSessionId String   @map("patient_treatment_session_id") @db.Uuid
+  imageUrl                  String   @map("image_url")
+  storagePath               String?  @map("storage_path")
+  sortOrder                 Int      @default(0) @map("sort_order")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session PatientTreatmentSession @relation(fields: [patientTreatmentSessionId], references: [id], onDelete: Cascade)
+
+  @@index([patientTreatmentSessionId, sortOrder])
+  @@map("patient_treatment_session_images")
 }
 
 enum PatientServiceStatus {
