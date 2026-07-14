@@ -58,6 +58,7 @@ export interface TreatmentHistoryItemResponse {
   readonly serviceId: string;
   readonly serviceName: string;
   readonly sessionNumber: number;
+  readonly sessionTotal: number;
   readonly treatmentContent: string;
   readonly performedAt: string;
   readonly doctorName: string | null;

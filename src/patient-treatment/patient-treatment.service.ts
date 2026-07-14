@@ -105,6 +105,7 @@ export class PatientTreatmentService {
         serviceId: session.patientServiceRecord.id,
         serviceName: session.patientServiceRecord.serviceName,
         sessionNumber: session.sessionNumber,
+        sessionTotal,
         treatmentContent: session.treatmentContent,
         performedAt: session.performedAt.toISOString(),
         doctorName: session.doctor?.fullName ?? null,
