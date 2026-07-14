@@ -65,7 +65,6 @@ model Patient {
   visits           MedicalVisit[]
   followUps        PatientFollowUp[]
   referrer         Referrer?              @relation(fields: [referrerId], references: [id])
-  treatmentPlans   TreatmentPlan[]
   serviceRecords   PatientServiceRecord[]
   
   payments         PatientPayment[]
@@ -155,48 +154,6 @@ model VisitClinicalImage {
 
   @@index([visitId, category, sortOrder])
   @@map("visit_clinical_images")
-}
-
-/// Gói / kế hoạch điều trị (ví dụ: COMBO VÙNG BỤNG)
-model TreatmentPlan {
-  id                String              @id @default(uuid()) @db.Uuid
-  patientId         String              @map("patient_id") @db.Uuid
-  name              String
-  consultantName    String?             @map("consultant_name")
-  totalSessions     Int                 @map("total_sessions")
-  completedSessions Int                 @default(0) @map("completed_sessions")
-  activeSession     Int                 @default(1) @map("active_session")
-  status            TreatmentPlanStatus @default(IN_PROGRESS)
-  startedAt         DateTime?           @map("started_at") @db.Timestamptz(6)
-  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient           Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  sessions          TreatmentSession[]
-
-  @@index([patientId, status])
-  @@map("treatment_plans")
-}
-
-/// Buổi điều trị cụ thể trong một gói điều trị
-model TreatmentSession {
-  id                  String        @id @default(uuid()) @db.Uuid
-  treatmentPlanId     String        @map("treatment_plan_id") @db.Uuid
-  sessionNumber       Int           @map("session_number")
-  doctorName          String?       @map("doctor_name")
-  ptKtvName           String?       @map("pt_ktv_name")
-  professionalSupport String?       @map("professional_support")
-  treatmentContent    String?       @map("treatment_content")
-  note                String?
-  nextContent         String?       @map("next_content")
-  nextTreatmentDate   DateTime?     @map("next_treatment_date") @db.Timestamptz(6)
-  performedAt         DateTime?     @map("performed_at") @db.Timestamptz(6)
-  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  treatmentPlan       TreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-
-  @@unique([treatmentPlanId, sessionNumber])
-  @@index([treatmentPlanId, sessionNumber])
-  @@map("treatment_sessions")
 }
 
 /// Chu kỳ tái khám & hỏi thăm — sinh ra từ một lượt khám
@@ -488,11 +445,6 @@ enum VisitStatus {
   ONLINE
   NEED_ADJUSTMENT
   PLANNED
-}
-
-enum TreatmentPlanStatus {
-  IN_PROGRESS
-  COMPLETED
 }
 
 enum FollowUpScheduleStatus {
