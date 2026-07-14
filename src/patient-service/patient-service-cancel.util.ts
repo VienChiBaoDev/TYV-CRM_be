@@ -12,18 +12,20 @@ export async function cancelPatientServiceRecord(
 ): Promise<void> {
   const service = await tx.patientServiceRecord.findUnique({
     where: { id: serviceId },
-    select: { status: true },
+    select: { status: true, paidAmount: true },
   });
   if (!service || service.status === PatientServiceStatus.CANCELLED) {
     return;
   }
 
+  // Chốt hợp đồng tại phần đã thu — tránh "Còn lại" ảo sau hủy/hoàn
   await tx.patientServiceRecord.update({
     where: { id: serviceId },
     data: {
       status: PatientServiceStatus.CANCELLED,
       cancelledAt: new Date(),
       cancelledById,
+      finalAmount: service.paidAmount,
     },
   });
 }
