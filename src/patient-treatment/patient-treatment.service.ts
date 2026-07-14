@@ -1,0 +1,248 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PatientServiceStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
+import {
+  calcCompletedSessions,
+  getMaxAllowedSession,
+  getSessionTotal,
+} from '../patient-service/patient-service-session.rules';
+import {
+  mapTreatmentSessionToResponse,
+  TreatmentHistoryItemResponse,
+  TreatmentSessionListResponse,
+  TreatmentSessionResponse,
+} from './mappers/treatment-session.mapper';
+
+/**
+ * Include cho session
+ * Để lấy thông tin doctor, ptKtv, performedBy khi lấy danh sách điều trị chi tiết
+ */
+const sessionInclude = {
+  doctor: { select: { fullName: true } },
+  ptKtv: { select: { fullName: true } },
+  performedBy: { select: { fullName: true } },
+} satisfies Prisma.PatientTreatmentSessionInclude;
+
+@Injectable()
+export class PatientTreatmentService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Find all sessions by service
+   */
+  async findByService(patientId: string, serviceId: string): Promise<TreatmentSessionListResponse> {
+    // Lấy dịch vụ đã thanh toán và hoạt động
+    const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
+    // Tính tổng số buổi điều trị
+    const sessionTotal = getSessionTotal(service);
+
+    // Lấy danh sách điều trị chi tiết
+    const sessions = await this.prisma.patientTreatmentSession.findMany({
+      where: { patientServiceRecordId: serviceId },
+      include: sessionInclude,
+      orderBy: { sessionNumber: 'asc' },
+    });
+
+    return {
+      service: {
+        id: service.id,
+        serviceName: service.serviceName,
+        sessionTotal,
+        completedSessions: service.completedSessions,
+        maxAllowedSession: getMaxAllowedSession(service),
+      },
+      sessions: sessions.map(mapTreatmentSessionToResponse),
+    };
+  }
+  /**
+   * Find all sessions by patient
+   */
+  async findAllByPatient(patientId: string): Promise<TreatmentHistoryItemResponse[]> {
+    await this.ensurePatientExists(patientId);
+    // Lấy danh sách điều trị chi tiết
+    const sessions = await this.prisma.patientTreatmentSession.findMany({
+      where: {
+        patientServiceRecord: { patientId },
+      },
+      include: {
+        doctor: { select: { fullName: true } },
+        ptKtv: { select: { fullName: true } },
+        patientServiceRecord: {
+          select: {
+            id: true,
+            serviceName: true,
+            completedSessions: true,
+            treatmentCount: true,
+            quantity: true,
+          },
+        },
+      },
+      orderBy: [{ performedAt: 'desc' }],
+    });
+
+    return sessions.map((session) => {
+      const sessionTotal = getSessionTotal(session.patientServiceRecord);
+      const isCompleted = session.patientServiceRecord.completedSessions >= sessionTotal;
+
+      return {
+        id: session.id,
+        serviceId: session.patientServiceRecord.id,
+        serviceName: session.patientServiceRecord.serviceName,
+        sessionNumber: session.sessionNumber,
+        treatmentContent: session.treatmentContent,
+        performedAt: session.performedAt.toISOString(),
+        doctorName: session.doctor?.fullName ?? null,
+        ptKtvName: session.ptKtv?.fullName ?? null,
+        status: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
+      };
+    });
+  }
+
+  /**
+   * Upsert session
+   */
+  async upsertSession(
+    patientId: string,
+    serviceId: string,
+    dto: UpsertTreatmentSessionDto,
+    performedById: string,
+  ): Promise<TreatmentSessionResponse> {
+    const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
+    this.validateSessionNumber(service, dto.sessionNumber);
+
+    if (dto.doctorId) await this.ensureStaffExists(dto.doctorId, 'Bác sĩ');
+    if (dto.ptKtvId) await this.ensureStaffExists(dto.ptKtvId, 'PT/KTV');
+
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.patientTreatmentSession.findUnique({
+        where: {
+          patientServiceRecordId_sessionNumber: {
+            patientServiceRecordId: serviceId,
+            sessionNumber: dto.sessionNumber,
+          },
+        },
+      });
+
+      // Nếu đã tồn tại thì update, nếu không thì create
+      const saved = existing
+        ? await tx.patientTreatmentSession.update({
+            where: { id: existing.id },
+            data: {
+              doctorId: dto.doctorId ?? null,
+              ptKtvId: dto.ptKtvId ?? null,
+              professionalSupport: dto.professionalSupport?.trim() || null,
+              treatmentContent: dto.treatmentContent.trim(),
+              note: dto.note?.trim() || null,
+              nextContent: dto.nextContent?.trim() || null,
+              nextTreatmentDate: dto.nextTreatmentDate ? new Date(dto.nextTreatmentDate) : null,
+            },
+            include: sessionInclude,
+          })
+        : await tx.patientTreatmentSession.create({
+            data: {
+              patientServiceRecordId: serviceId,
+              sessionNumber: dto.sessionNumber,
+              doctorId: dto.doctorId ?? null,
+              ptKtvId: dto.ptKtvId ?? null,
+              professionalSupport: dto.professionalSupport?.trim() || null,
+              treatmentContent: dto.treatmentContent.trim(),
+              note: dto.note?.trim() || null,
+              nextContent: dto.nextContent?.trim() || null,
+              nextTreatmentDate: dto.nextTreatmentDate ? new Date(dto.nextTreatmentDate) : null,
+              performedAt: now,
+              performedById,
+            },
+            include: sessionInclude,
+          });
+
+      const allSessions = await tx.patientTreatmentSession.findMany({
+        where: { patientServiceRecordId: serviceId },
+        // Lấy sessionNumber và treatmentContent
+        select: { sessionNumber: true, treatmentContent: true },
+      });
+      // Tính tổng số buổi điều trị đã hoàn thành
+      const completedSessions = calcCompletedSessions(allSessions);
+
+      // Cập nhật số buổi điều trị đã hoàn thành
+      await tx.patientServiceRecord.update({
+        where: { id: serviceId },
+        data: { completedSessions },
+      });
+
+      return mapTreatmentSessionToResponse(saved);
+    });
+  }
+
+  /**
+   * Lấy dịch vụ đã thanh toán và hoạt động
+   */
+  private async getActivePaidServiceOrThrow(patientId: string, serviceId: string) {
+    const service = await this.prisma.patientServiceRecord.findFirst({
+      where: { id: serviceId, patientId },
+    });
+    if (!service) {
+      throw new NotFoundException('Dịch vụ không tồn tại');
+    }
+    if (service.status !== PatientServiceStatus.ACTIVE) {
+      throw new BadRequestException('Dịch vụ đã bị hủy, không thể điều trị');
+    }
+    if (Number(service.paidAmount) <= 0) {
+      throw new BadRequestException('Dịch vụ chưa thanh toán, không thể điều trị');
+    }
+
+    return service;
+  }
+
+  /**
+   * Validate session number
+   */
+  private validateSessionNumber(
+    service: {
+      treatmentCount: number;
+      quantity: number;
+      finalAmount: Prisma.Decimal;
+      paidAmount: Prisma.Decimal;
+      completedSessions: number;
+    },
+    sessionNumber: number,
+  ) {
+    // Tính tổng số buổi điều trị
+    const sessionTotal = getSessionTotal(service);
+    // Tính số buổi điều trị tối đa
+    const maxAllowed = getMaxAllowedSession(service);
+
+    if (sessionNumber < 1 || sessionNumber > sessionTotal) {
+      throw new BadRequestException(`Buổi điều trị phải từ 1 đến ${sessionTotal}`);
+    }
+    if (sessionNumber > maxAllowed) {
+      throw new BadRequestException('Chưa thanh toán đủ để mở buổi điều trị này');
+    }
+  }
+
+  /**
+   * Ensure patient exists
+   */
+  private async ensurePatientExists(patientId: string) {
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { id: true },
+    });
+    if (!patient) throw new NotFoundException('Không tìm thấy bệnh nhân');
+  }
+
+  /**
+   * Ensure staff exists
+   */
+  private async ensureStaffExists(staffId: string, label: string) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { id: true, isActive: true },
+    });
+    if (!staff?.isActive) {
+      throw new BadRequestException(`${label} không hợp lệ`);
+    }
+  }
+}

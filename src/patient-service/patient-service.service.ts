@@ -12,6 +12,7 @@ import {
   assertPatientServiceIsActive,
   cancelPatientServiceRecord,
 } from './patient-service-cancel.util';
+import { getSessionTotal } from './patient-service-session.rules';
 
 // recordInclude là một object chứa các thuộc tính của bảng patient_service_record
 // select: { fullName: true } là một object chứa các thuộc tính của bảng staff
@@ -199,9 +200,18 @@ export class PatientServiceService {
 
     const unitPriceAfterVat = dto.unitPriceAfterVat ?? Number(existing.unitPriceAfterVat);
     const quantity = dto.quantity ?? existing.quantity;
-    if (quantity < existing.completedSessions) {
-      throw new BadRequestException('Số lượng không được nhỏ hơn số buổi đã sử dụng');
+
+    const nextTreatmentCount = dto.treatmentCount ?? existing.treatmentCount;
+    const nextQuantity = dto.quantity ?? existing.quantity;
+    const sessionTotal = getSessionTotal({
+      treatmentCount: nextTreatmentCount,
+      quantity: nextQuantity,
+    });
+
+    if (sessionTotal < existing.completedSessions) {
+      throw new BadRequestException('Tổng số buổi không được nhỏ hơn số buổi đã điều trị');
     }
+
     const discount = dto.discount ?? Number(existing.discount);
     const subtotal = unitPriceAfterVat * quantity;
     // finalAmount là tổng tiền sau khi giảm giá
