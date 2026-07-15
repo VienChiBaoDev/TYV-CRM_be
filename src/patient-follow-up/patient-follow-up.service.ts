@@ -9,7 +9,6 @@ import {
   PendingAssessmentItemResponse,
   addDaysUtc,
   endOfTodayUtc,
-  keepLatestFollowUpPerPatient,
   mapToPendingAssessmentItem,
   mapToScheduleItem,
   startOfTodayUtc,
@@ -30,9 +29,6 @@ import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 const followUpInclude = {
   patient: {
     select: { id: true, fullName: true, patientCode: true },
-  },
-  originatingVisit: {
-    select: { visitNumber: true },
   },
 } satisfies Prisma.PatientFollowUpInclude;
 
@@ -103,8 +99,7 @@ export class PatientFollowUpService {
         followUpDate: 'asc',
       },
     });
-    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    const items = latestPerPatient
+    const items = rows
       .sort((a, b) => getEffectiveFollowUpDate(a).getTime() - getEffectiveFollowUpDate(b).getTime())
       .map(mapToScheduleItem);
 
@@ -166,9 +161,7 @@ export class PatientFollowUpService {
         assessmentDate: 'asc',
       },
     });
-    // Lấy lịch tái khám gần nhất cho mỗi bệnh nhân
-    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    const items = latestPerPatient
+    const items = rows
       .sort((a, b) => a.assessmentDate.getTime() - b.assessmentDate.getTime())
       .map(mapToPendingAssessmentItem);
 
