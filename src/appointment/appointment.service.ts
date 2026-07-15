@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import {
@@ -139,7 +140,7 @@ export class AppointmentService {
           },
         });
         return updated;
-      });
+      }, PRISMA_TRANSACTION_OPTIONS);
     }
 
     return this.prisma.appointment.update({
@@ -236,6 +237,6 @@ export class AppointmentService {
           },
         },
       });
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 }

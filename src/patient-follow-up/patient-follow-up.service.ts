@@ -16,6 +16,7 @@ import {
 } from './mappers/follow-up.mapper';
 import { ClinicBranch, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
 import { DEFAULT_DAYS_AHEAD } from 'src/common/common';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
 import type { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
@@ -213,7 +214,7 @@ export class PatientFollowUpService {
         data: { scheduleStatus: 'SCHEDULED', scheduledAppointmentId: appointment.id },
         include: followUpInclude,
       });
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     return mapToScheduleItem(updated);
   }

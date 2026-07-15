@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import {
   PatientServiceResponse,
@@ -153,7 +154,7 @@ export class PatientServiceService {
         include: recordInclude,
       });
       return mapPatientServiceToResponse(updated);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async update(

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ClinicalImageCategory, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
@@ -32,11 +33,6 @@ const MIME_EXTENSION: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
 };
-
-const TRANSACTION_OPTIONS = {
-  maxWait: 5_000,
-  timeout: 15_000,
-} as const;
 
 const visitInclude = {
   herbs: { orderBy: { sortOrder: 'asc' as const } },
@@ -100,7 +96,7 @@ export class MedicalVisitService {
         where: { id: createdVisit.id },
         include: visitInclude,
       });
-    }, TRANSACTION_OPTIONS);
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     // Trả về lần khám mới nhất
     return mapVisitToResponse(visit);
@@ -180,7 +176,7 @@ export class MedicalVisitService {
         where: { id: visitId },
         include: visitInclude,
       });
-    }, TRANSACTION_OPTIONS);
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     return mapVisitToResponse(visit);
   }
@@ -191,7 +187,7 @@ export class MedicalVisitService {
     await this.prisma.$transaction(async (tx) => {
       await tx.medicalVisit.delete({ where: { id: visitId } });
       await this.syncPatientNextFollowUpDate(tx, patientId);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async uploadClinicalImage(

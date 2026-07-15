@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientPaymentDto, PATIENT_PAYMENT_METHOD } from './dto/create-patient-payment.dto';
 import {
   mapPatientPaymentToResponse,
@@ -134,7 +135,7 @@ export class PatientPaymentService {
       }
       // chuyển đổi dữ liệu thanh toán thành dữ liệu để hiển thị
       return mapPatientPaymentToResponse(payment);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async createRefund(
@@ -216,7 +217,7 @@ export class PatientPaymentService {
       }
 
       return mapPatientPaymentToResponse(payment);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   private async generateRefundVoucherCode(tx: Prisma.TransactionClient): Promise<string> {

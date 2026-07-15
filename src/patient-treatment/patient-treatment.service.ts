@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
 import {
@@ -189,7 +190,7 @@ export class PatientTreatmentService {
       });
 
       return mapTreatmentSessionToResponse(saved);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   /**
