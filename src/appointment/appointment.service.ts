@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -30,7 +31,10 @@ interface FindAppointmentsParams {
 
 @Injectable()
 export class AppointmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+  ) {}
 
   create(dto: CreateAppointmentDto) {
     this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
@@ -114,7 +118,7 @@ export class AppointmentService {
     const isCancelling = dto.status === AppointmentStatus.CANCELLED;
 
     if (isCancelling) {
-      return this.prisma.$transaction(async (tx) => {
+      return this.prismaTx.$transaction(async (tx) => {
         const updated = await tx.appointment.update({
           where: { id },
           data: {
@@ -209,7 +213,7 @@ export class AppointmentService {
     if (!CHECK_IN_ALLOWED_STATUSES.includes(appointment.status)) {
       throw new BadRequestException('Chỉ có thể tiếp nhận lịch ở trạng thái Đã đặt hoặc Xác nhận');
     }
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       const visitNumber = await this.getNextVisitNumber(tx, appointment.patientId);
       const visitDate = formatDateOnly(appointment.scheduledAt);
 

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
@@ -41,6 +42,7 @@ const sessionInclude = {
 export class PatientTreatmentService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
     private readonly supabaseStorage: SupabaseStorageService,
   ) {}
 
@@ -75,27 +77,30 @@ export class PatientTreatmentService {
    * Find all sessions by patient
    */
   async findAllByPatient(patientId: string): Promise<TreatmentHistoryItemResponse[]> {
-    await this.ensurePatientExists(patientId);
-    // Lấy danh sách điều trị chi tiết
-    const sessions = await this.prisma.patientTreatmentSession.findMany({
-      where: {
-        patientServiceRecord: { patientId },
-      },
-      include: {
-        doctor: { select: { fullName: true } },
-        ptKtv: { select: { fullName: true } },
-        patientServiceRecord: {
-          select: {
-            id: true,
-            serviceName: true,
-            completedSessions: true,
-            treatmentCount: true,
-            quantity: true,
+    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
+    const [, sessions] = await Promise.all([
+      this.ensurePatientExists(patientId),
+      // Lấy danh sách điều trị chi tiết
+      this.prisma.patientTreatmentSession.findMany({
+        where: {
+          patientServiceRecord: { patientId },
+        },
+        include: {
+          doctor: { select: { fullName: true } },
+          ptKtv: { select: { fullName: true } },
+          patientServiceRecord: {
+            select: {
+              id: true,
+              serviceName: true,
+              completedSessions: true,
+              treatmentCount: true,
+              quantity: true,
+            },
           },
         },
-      },
-      orderBy: [{ performedAt: 'desc' }],
-    });
+        orderBy: [{ performedAt: 'desc' }],
+      }),
+    ]);
 
     return sessions.map((session) => {
       const sessionTotal = getSessionTotal(session.patientServiceRecord);
@@ -133,7 +138,7 @@ export class PatientTreatmentService {
 
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       const existing = await tx.patientTreatmentSession.findUnique({
         where: {
           patientServiceRecordId_sessionNumber: {

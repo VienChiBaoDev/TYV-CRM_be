@@ -15,6 +15,7 @@ import {
 } from './mappers/follow-up.mapper';
 import { ClinicBranch, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaTransactionService } from 'src/prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
 import { DEFAULT_DAYS_AHEAD } from 'src/common/common';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
@@ -34,7 +35,10 @@ const followUpInclude = {
 
 @Injectable()
 export class PatientFollowUpService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+  ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
   async findUpcoming(params: {
@@ -179,7 +183,7 @@ export class PatientFollowUpService {
     if (followUp.scheduleStatus === 'SCHEDULED') {
       throw new ConflictException('Lịch tái khám đã được đặt lịch');
     }
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prismaTx.$transaction(async (tx) => {
       const scheduledAt = new Date(body.scheduledAt);
       const endedAt = body.endedAt
         ? new Date(body.endedAt)
