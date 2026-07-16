@@ -15,10 +15,18 @@ export class CreateAppointmentDto {
   @IsISO8601()
   scheduledAt!: string;
 
+  @IsISO8601()
+  endedAt!: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(255)
   doctorName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  assistantName?: string;
 
   @IsOptional()
   @IsEnum(ClinicBranch)

@@ -11,6 +11,7 @@ import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { MedicalCaseModule } from './medical-case/medical-case.module';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
 import { ReferrerModule } from './referrer/referrer.module';
 import { StaffModule } from './staff/staff.module';
@@ -18,6 +19,12 @@ import { PatientModule } from './patient/patient.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.module';
+import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { MedicineModule } from './medicine/medicine.module';
+import { PatientServiceModule } from './patient-service/patient-service.module';
+import { PatientPaymentModule } from './patient-payment/patient-payment.module';
+import { PatientTreatmentModule } from './patient-treatment/patient-treatment.module';
+import { StaffShiftModule } from './staff-shift/staff-shift.module';
 
 @Module({
   imports: [
@@ -42,10 +49,17 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
     AuthModule,
     PatientModule,
     MedicalVisitModule,
+    MedicalCaseModule,
     PatientFollowUpModule,
+    ServiceCatalogModule,
     ReferrerModule,
     AppointmentModule,
     StaffModule,
+    MedicineModule,
+    PatientServiceModule,
+    PatientPaymentModule,
+    PatientTreatmentModule,
+    StaffShiftModule,
   ],
   controllers: [AppController],
   providers: [
@@ -55,4 +69,4 @@ import { PatientFollowUpModule } from './patient-follow-up/patient-follow-up.mod
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
-export class AppModule { }
+export class AppModule {}

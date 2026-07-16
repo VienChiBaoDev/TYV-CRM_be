@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClinicBranch, CustomerStatus, Prisma } from '@prisma/client';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/patient.mapper';
@@ -11,6 +17,7 @@ interface FindPatientsParams {
 }
 
 const patientInclude = {
+  assignedStaff: { select: { id: true } },
   visits: {
     include: {
       herbs: { orderBy: { sortOrder: 'asc' as const } },
@@ -20,6 +27,17 @@ const patientInclude = {
     orderBy: { visitNumber: 'asc' as const },
   },
 } satisfies Prisma.PatientInclude;
+
+/** Quyền xem hồ sơ: ADMIN xem tất cả; hồ sơ chưa gán ai thì mọi người xem được;
+ *  còn lại chỉ nhân viên được gán mới xem được. */
+function canView(
+  assignedStaff: { id: string }[],
+  user: JwtPayloadUser,
+): boolean {
+  if (user.role === 'ADMIN') return true;
+  if (assignedStaff.length === 0) return true;
+  return assignedStaff.some((staff) => staff.id === user.id);
+}
 
 @Injectable()
 export class PatientService {
@@ -41,47 +59,70 @@ export class PatientService {
         clinicBranch: dto.clinicBranch ?? ClinicBranch.HANG_BONG,
         customerStatus: CustomerStatus.LEAD,
         referrerId: dto.referrerId,
-        avatarInitials: this.buildInitials(dto.fullName),
+        avatarInitials: buildInitials(dto.fullName),
+        assignedStaff: dto.assignedStaffIds?.length
+          ? { connect: dto.assignedStaffIds.map((id) => ({ id })) }
+          : undefined,
       },
     });
   }
 
-  findAll(params: FindPatientsParams) {
-    const where: Prisma.PatientWhereInput = {
-      ...(params.branch ? { clinicBranch: params.branch } : {}),
-      ...(params.referrerId ? { referrerId: params.referrerId } : {}),
-      ...(params.search
-        ? {
-            OR: [
-              { fullName: { contains: params.search, mode: 'insensitive' } },
-              { phone: { contains: params.search } },
-              { patientCode: { contains: params.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
+  findAll(params: FindPatientsParams, user: JwtPayloadUser) {
+    const conditions: Prisma.PatientWhereInput[] = [];
+
+    if (params.branch) conditions.push({ clinicBranch: params.branch });
+    if (params.referrerId) conditions.push({ referrerId: params.referrerId });
+    if (params.search) {
+      conditions.push({
+        OR: [
+          { fullName: { contains: params.search, mode: 'insensitive' } },
+          { phone: { contains: params.search } },
+          { patientCode: { contains: params.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    // Lọc quyền xem: ADMIN thấy tất cả; còn lại chỉ thấy hồ sơ chưa gán ai hoặc gán cho mình.
+    if (user.role !== 'ADMIN') {
+      conditions.push({
+        OR: [
+          { assignedStaff: { none: {} } },
+          { assignedStaff: { some: { id: user.id } } },
+        ],
+      });
+    }
 
     return this.prisma.patient.findMany({
-      where,
+      where: conditions.length ? { AND: conditions } : {},
       orderBy: { createdAt: 'desc' },
       include: { referrer: { select: { id: true, fullName: true } } },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: JwtPayloadUser) {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
-      include: { referrer: { select: { id: true, fullName: true } } },
+      include: {
+        referrer: { select: { id: true, fullName: true } },
+        assignedStaff: { select: { id: true } },
+      },
     });
 
     if (!patient) {
       throw new NotFoundException('Không tìm thấy khách hàng');
     }
 
+    if (!canView(patient.assignedStaff, user)) {
+      throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
+    }
+
     return patient;
   }
   // Lấy chi tiết mỗi lần khám của khách hàng
-  async findMedicalRecord(patientId: string): Promise<PatientDetailResponse> {
+  async findMedicalRecord(
+    patientId: string,
+    user: JwtPayloadUser,
+  ): Promise<PatientDetailResponse> {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
       include: patientInclude,
@@ -89,6 +130,10 @@ export class PatientService {
 
     if (!patient) {
       throw new NotFoundException('Patient not found');
+    }
+
+    if (!canView(patient.assignedStaff, user)) {
+      throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
     }
 
     return mapPatientToDetailResponse(patient);
@@ -109,12 +154,5 @@ export class PatientService {
     }
     // Cực hiếm: rơi vào đây khi nhiều bản ghi trùng — dùng timestamp đảm bảo duy nhất.
     return `TYV${Date.now()}`;
-  }
-
-  private buildInitials(fullName: string): string {
-    const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 }

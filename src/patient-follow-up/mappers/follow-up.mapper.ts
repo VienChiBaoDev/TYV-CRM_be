@@ -48,6 +48,9 @@ export interface FollowUpScheduleItemResponse {
   readonly scheduleStatus: FollowUpScheduleStatus;
   readonly scheduleStatusFe: number;
   readonly originatingVisitId: string;
+  readonly rescheduledFollowUpDate: string | null;
+  readonly rescheduleNote: string | null;
+  readonly effectiveFollowUpDate: string;
 }
 export interface PendingAssessmentItemResponse {
   readonly id: string;
@@ -66,30 +69,30 @@ type FollowUpWithPatient = PatientFollowUp & {
   patient: Pick<Patient, 'id' | 'fullName' | 'patientCode'>;
 };
 
-type FollowUpWithOriginatingVisit = FollowUpWithPatient & {
-  originatingVisit: { visitNumber: number };
-};
-
-/** Mỗi bệnh nhân chỉ giữ lịch tái khám từ lần khám mới nhất */
-export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVisit>(
-  rows: T[],
-): T[] {
-  const latestByPatient = new Map<string, T>();
-
-  for (const row of rows) {
-    const existing = latestByPatient.get(row.patientId);
-    if (
-      !existing ||
-      row.originatingVisit.visitNumber > existing.originatingVisit.visitNumber
-    ) {
-      latestByPatient.set(row.patientId, row);
-    }
-  }
-
-  return Array.from(latestByPatient.values());
+// Tính ngày tái khám hiệu lực (rescheduled hoặc original)
+export function getEffectiveFollowUpDate(
+  row: Pick<PatientFollowUp, 'followUpDate' | 'rescheduledFollowUpDate'>,
+): Date {
+  return row.rescheduledFollowUpDate ?? row.followUpDate;
 }
+
+/** Ngày tái khám sớm nhất trong tương lai; nếu không có thì lấy quá hạn sớm nhất. */
+export function pickPatientNextFollowUpDate(
+  rows: Pick<PatientFollowUp, 'followUpDate' | 'rescheduledFollowUpDate'>[],
+  today: Date,
+): Date | null {
+  if (rows.length === 0) return null;
+
+  const effectiveDates = rows
+    .map((row) => getEffectiveFollowUpDate(row))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return effectiveDates.find((date) => date >= today) ?? effectiveDates[0] ?? null;
+}
+
 // Dùng cho Bảng 1: Sắp đến hạn tái khám trong N ngày tới (Không có assessment)
 export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleItemResponse {
+  const effective = getEffectiveFollowUpDate(row);
   return {
     id: row.id,
     patientId: row.patientId,
@@ -102,6 +105,13 @@ export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleIte
     scheduleStatus: row.scheduleStatus,
     scheduleStatusFe: SCHEDULE_STATUS_TO_FE[row.scheduleStatus],
     originatingVisitId: row.originatingVisitId,
+    // rescheduledFollowUpDate và rescheduleNote trả về cho FE để hiển thị lịch tái khám đã điều chỉnh
+    rescheduledFollowUpDate: row.rescheduledFollowUpDate
+      ? formatDateOnly(row.rescheduledFollowUpDate)
+      : null,
+    rescheduleNote: row.rescheduleNote,
+    // effectiveFollowUpDate giúp FE không phải tự tính rescheduled ?? original
+    effectiveFollowUpDate: formatDateOnly(effective),
   };
 }
 

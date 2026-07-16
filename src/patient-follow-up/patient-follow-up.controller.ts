@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Body, Patch, Param, Query, ParseUUIDPipe } from '@nestjs/common';
 import { PatientFollowUpService } from './patient-follow-up.service';
 import { QueryUpcomingFollowUpsDto } from './dto/query-upcoming-follow-ups.dto';
 import {
@@ -6,27 +6,37 @@ import {
   PendingAssessmentItemResponse,
 } from './mappers/follow-up.mapper';
 import { QueryPendingAssessmentsDto } from './dto/query-pending-assessments.dto';
+import type { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 import { ScheduleFollowUpDto } from './dto/schedule-follow-up.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
+import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
+import { CurrentUser } from 'src/auth/current-user.decorator';
+import { JwtPayloadUser } from 'src/auth/jwt-auth.guard';
 
 @Controller('follow-ups')
 export class PatientFollowUpController {
   constructor(private readonly patientFollowUpService: PatientFollowUpService) {}
 
   @Get('upcoming')
-  findUpcoming(@Query() query: QueryUpcomingFollowUpsDto): Promise<FollowUpScheduleItemResponse[]> {
+  findUpcoming(
+    @Query() query: QueryUpcomingFollowUpsDto,
+  ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     return this.patientFollowUpService.findUpcoming({
       branch: query.branch,
       daysAhead: query.daysAhead,
+      page: query.page,
+      limit: query.limit,
     });
   }
 
   @Get('pending-assessment')
   findPendingAssessments(
     @Query() query: QueryPendingAssessmentsDto,
-  ): Promise<PendingAssessmentItemResponse[]> {
+  ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
     return this.patientFollowUpService.findPendingAssessments({
       branch: query.branch,
+      page: query.page,
+      limit: query.limit,
     });
   }
 
@@ -44,5 +54,14 @@ export class PatientFollowUpController {
     @Body() body: SubmitAssessmentDto,
   ): Promise<PendingAssessmentItemResponse> {
     return this.patientFollowUpService.submitAssessment(id, body);
+  }
+
+  @Patch(':id/reschedule')
+  rescheduleFollowUp(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RescheduleFollowUpDto,
+    @CurrentUser() user: JwtPayloadUser,
+  ): Promise<FollowUpScheduleItemResponse> {
+    return this.patientFollowUpService.rescheduleFollowUp(id, body, user.id);
   }
 }
