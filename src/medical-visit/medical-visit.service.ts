@@ -2,10 +2,16 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ClinicalImageCategory, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { FollowUpPlanDto } from './dto/create-medical-visit.dto';
+import {
+  pickPatientNextFollowUpDate,
+  startOfTodayUtc,
+} from '../patient-follow-up/mappers/follow-up.mapper';
 import {
   MedicalVisitResponse,
   VisitClinicalImageResponse,
@@ -33,11 +39,6 @@ const MIME_EXTENSION: Record<string, string> = {
   'image/gif': 'gif',
 };
 
-const TRANSACTION_OPTIONS = {
-  maxWait: 5_000,
-  timeout: 15_000,
-} as const;
-
 const visitInclude = {
   herbs: { orderBy: { sortOrder: 'asc' as const } },
   clinicalImages: { orderBy: { sortOrder: 'asc' as const } },
@@ -48,17 +49,21 @@ const visitInclude = {
 export class MedicalVisitService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
     private readonly supabaseStorage: SupabaseStorageService,
   ) {}
 
   async findAllByPatient(patientId: string): Promise<MedicalVisitResponse[]> {
-    await this.ensurePatientExists(patientId);
-
-    const visits = await this.prisma.medicalVisit.findMany({
-      where: { patientId },
-      include: visitInclude,
-      orderBy: [{ visitDate: 'desc' }, { visitNumber: 'desc' }],
-    });
+    // Chạy song song với query chính — nếu patient không tồn tại, ensurePatientExists
+    // vẫn throw 404 như cũ (findMany chỉ trả về rỗng), nhưng không tốn thêm 1 round-trip nối tiếp
+    const [, visits] = await Promise.all([
+      this.ensurePatientExists(patientId),
+      this.prisma.medicalVisit.findMany({
+        where: { patientId },
+        include: visitInclude,
+        orderBy: [{ visitDate: 'desc' }, { visitNumber: 'desc' }],
+      }),
+    ]);
 
     return visits.map(mapVisitToResponse);
   }
@@ -71,7 +76,7 @@ export class MedicalVisitService {
   async create(patientId: string, dto: CreateMedicalVisitDto): Promise<MedicalVisitResponse> {
     await this.ensurePatientExists(patientId);
 
-    const visit = await this.prisma.$transaction(async (tx) => {
+    const visit = await this.prismaTx.$transaction(async (tx) => {
       // Lấy số thứ tự của lần khám mới nhất theo id khách hàng
       const visitNumber = await this.getNextVisitNumber(tx, patientId);
       // Xây dựng dữ liệu lần khám mới
@@ -83,24 +88,22 @@ export class MedicalVisitService {
         include: visitInclude,
       });
 
-      if (dto.followUpPlan) {
-        // Tạo lần theo dõi sau khám
-        await this.upsertFollowUpPlan(
-          tx,
-          patientId,
-          createdVisit.id,
-          dto.visit.doctorName,
-          dto.visit.location,
-          dto.followUpPlan,
-          visitNumber,
-        );
+      if (!dto.followUpPlan) {
+        // createdVisit đã có đủ include — không cần fetch lại
+        return createdVisit;
       }
-      // Lấy lần khám mới nhất
-      return tx.medicalVisit.findUniqueOrThrow({
-        where: { id: createdVisit.id },
-        include: visitInclude,
-      });
-    }, TRANSACTION_OPTIONS);
+      // Tạo lần theo dõi sau khám
+      const followUp = await this.upsertFollowUpPlan(
+        tx,
+        patientId,
+        createdVisit.id,
+        dto.visit.doctorName,
+        dto.visit.location,
+        dto.followUpPlan,
+      );
+      // Không fetch lại toàn bộ visit — chỉ gắn follow-up mới vào kết quả đã có
+      return { ...createdVisit, followUpsOriginated: [followUp] };
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     // Trả về lần khám mới nhất
     return mapVisitToResponse(visit);
@@ -114,7 +117,7 @@ export class MedicalVisitService {
     // Lấy lần khám cũ
     const existing = await this.getVisitOrThrow(patientId, visitId);
 
-    const visit = await this.prisma.$transaction(async (tx) => {
+    const visit = await this.prismaTx.$transaction(async (tx) => {
       if (dto.visit) {
         // Cập nhật lần khám cũ
         await tx.medicalVisit.update({
@@ -172,7 +175,6 @@ export class MedicalVisitService {
           doctorName,
           location,
           dto.followUpPlan,
-          existing.visitNumber,
         );
       }
 
@@ -180,7 +182,7 @@ export class MedicalVisitService {
         where: { id: visitId },
         include: visitInclude,
       });
-    }, TRANSACTION_OPTIONS);
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     return mapVisitToResponse(visit);
   }
@@ -188,10 +190,10 @@ export class MedicalVisitService {
   async remove(patientId: string, visitId: string): Promise<void> {
     await this.getVisitOrThrow(patientId, visitId);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prismaTx.$transaction(async (tx) => {
       await tx.medicalVisit.delete({ where: { id: visitId } });
       await this.syncPatientNextFollowUpDate(tx, patientId);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async uploadClinicalImage(
@@ -373,8 +375,7 @@ export class MedicalVisitService {
     physicianInCharge: string,
     location: string,
     plan: FollowUpPlanDto,
-    visitNumber: number,
-  ): Promise<void> {
+  ) {
     const followUpDate = parseDateOnly(plan.followUpDate);
     const assessmentDate = subtractDays(plan.followUpDate, plan.reminderDaysBefore);
     const facility = resolveClinicBranchFromLocation(location);
@@ -384,84 +385,61 @@ export class MedicalVisitService {
       where: { originatingVisitId },
     });
 
-    if (existing) {
-      await tx.patientFollowUp.update({
-        where: { id: existing.id },
-        data: {
-          followUpDate,
-          assessmentDate,
-          physicianInCharge,
-          facility,
-        },
-      });
-    } else {
-      await tx.patientFollowUp.create({
-        data: {
-          patientId,
-          originatingVisitId,
-          followUpDate,
-          assessmentDate,
-          physicianInCharge,
-          facility,
-        },
-      });
-    }
-    // Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới
-    await this.supersedeOlderIncompleteFollowUps(
-      tx,
-      patientId,
-      originatingVisitId,
-      visitNumber,
-    );
+    const followUp = existing
+      ? await tx.patientFollowUp.update({
+          where: { id: existing.id },
+          data: {
+            followUpDate,
+            assessmentDate,
+            physicianInCharge,
+            facility,
+          },
+        })
+      : await tx.patientFollowUp.create({
+          data: {
+            patientId,
+            originatingVisitId,
+            followUpDate,
+            assessmentDate,
+            physicianInCharge,
+            facility,
+          },
+        });
 
+    // Một lần update patient duy nhất (customerStatus + nextFollowUpDate) thay vì 2 round-trip riêng
+    const nextFollowUpDate = await this.computeNextFollowUpDate(tx, patientId);
     await tx.patient.update({
       where: { id: patientId },
-      data: {
-        /** Cập nhật trạng thái khách hàng */
-        customerStatus: customerStatus,
-      },
+      data: { customerStatus, nextFollowUpDate },
     });
 
-    await this.syncPatientNextFollowUpDate(tx, patientId);
+    return followUp;
   }
 
-  /** Xóa lịch tái khám cũ từ các lần khám trước khi lưu lịch mới */
-  private async supersedeOlderIncompleteFollowUps(
+  private async computeNextFollowUpDate(
     tx: Prisma.TransactionClient,
     patientId: string,
-    originatingVisitId: string,
-    visitNumber: number,
-  ): Promise<void> {
-    await tx.patientFollowUp.deleteMany({
+  ): Promise<Date | null> {
+    const incompleteFollowUps = await tx.patientFollowUp.findMany({
       where: {
         patientId,
         completedVisitId: null,
-        originatingVisitId: { not: originatingVisitId },
-        originatingVisit: {
-          visitNumber: { lt: visitNumber },
-        },
       },
+      select: { followUpDate: true, rescheduledFollowUpDate: true },
     });
+
+    return pickPatientNextFollowUpDate(incompleteFollowUps, startOfTodayUtc());
   }
 
   private async syncPatientNextFollowUpDate(
     tx: Prisma.TransactionClient,
     patientId: string,
   ): Promise<void> {
-    const latestFollowUp = await tx.patientFollowUp.findFirst({
-      where: {
-        patientId,
-        completedVisitId: null,
-      },
-      orderBy: { followUpDate: 'desc' },
-      select: { followUpDate: true },
-    });
+    const nextFollowUpDate = await this.computeNextFollowUpDate(tx, patientId);
 
     await tx.patient.update({
       where: { id: patientId },
-      data: {
-        nextFollowUpDate: latestFollowUp?.followUpDate ?? null,
-      },
+      data: { nextFollowUpDate },
     });
   }
 

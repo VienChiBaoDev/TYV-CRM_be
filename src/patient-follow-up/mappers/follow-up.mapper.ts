@@ -69,9 +69,6 @@ type FollowUpWithPatient = PatientFollowUp & {
   patient: Pick<Patient, 'id' | 'fullName' | 'patientCode'>;
 };
 
-type FollowUpWithOriginatingVisit = FollowUpWithPatient & {
-  originatingVisit: { visitNumber: number };
-};
 // Tính ngày tái khám hiệu lực (rescheduled hoặc original)
 export function getEffectiveFollowUpDate(
   row: Pick<PatientFollowUp, 'followUpDate' | 'rescheduledFollowUpDate'>,
@@ -79,21 +76,20 @@ export function getEffectiveFollowUpDate(
   return row.rescheduledFollowUpDate ?? row.followUpDate;
 }
 
-/** Mỗi bệnh nhân chỉ giữ lịch tái khám từ lần khám mới nhất */
-export function keepLatestFollowUpPerPatient<T extends FollowUpWithOriginatingVisit>(
-  rows: T[],
-): T[] {
-  const latestByPatient = new Map<string, T>();
+/** Ngày tái khám sớm nhất trong tương lai; nếu không có thì lấy quá hạn sớm nhất. */
+export function pickPatientNextFollowUpDate(
+  rows: Pick<PatientFollowUp, 'followUpDate' | 'rescheduledFollowUpDate'>[],
+  today: Date,
+): Date | null {
+  if (rows.length === 0) return null;
 
-  for (const row of rows) {
-    const existing = latestByPatient.get(row.patientId);
-    if (!existing || row.originatingVisit.visitNumber > existing.originatingVisit.visitNumber) {
-      latestByPatient.set(row.patientId, row);
-    }
-  }
+  const effectiveDates = rows
+    .map((row) => getEffectiveFollowUpDate(row))
+    .sort((a, b) => a.getTime() - b.getTime());
 
-  return Array.from(latestByPatient.values());
+  return effectiveDates.find((date) => date >= today) ?? effectiveDates[0] ?? null;
 }
+
 // Dùng cho Bảng 1: Sắp đến hạn tái khám trong N ngày tới (Không có assessment)
 export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleItemResponse {
   const effective = getEffectiveFollowUpDate(row);

@@ -9,13 +9,14 @@ import {
   PendingAssessmentItemResponse,
   addDaysUtc,
   endOfTodayUtc,
-  keepLatestFollowUpPerPatient,
   mapToPendingAssessmentItem,
   mapToScheduleItem,
   startOfTodayUtc,
 } from './mappers/follow-up.mapper';
 import { ClinicBranch, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaTransactionService } from 'src/prisma/prisma-transaction.service';
+import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
 import { DEFAULT_DAYS_AHEAD } from 'src/common/common';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
 import type { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
@@ -30,14 +31,14 @@ const followUpInclude = {
   patient: {
     select: { id: true, fullName: true, patientCode: true },
   },
-  originatingVisit: {
-    select: { visitNumber: true },
-  },
 } satisfies Prisma.PatientFollowUpInclude;
 
 @Injectable()
 export class PatientFollowUpService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+  ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
   async findUpcoming(params: {
@@ -102,8 +103,7 @@ export class PatientFollowUpService {
         followUpDate: 'asc',
       },
     });
-    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    const items = latestPerPatient
+    const items = rows
       .sort((a, b) => getEffectiveFollowUpDate(a).getTime() - getEffectiveFollowUpDate(b).getTime())
       .map(mapToScheduleItem);
 
@@ -165,9 +165,7 @@ export class PatientFollowUpService {
         assessmentDate: 'asc',
       },
     });
-    // Lấy lịch tái khám gần nhất cho mỗi bệnh nhân
-    const latestPerPatient = keepLatestFollowUpPerPatient(rows);
-    const items = latestPerPatient
+    const items = rows
       .sort((a, b) => a.assessmentDate.getTime() - b.assessmentDate.getTime())
       .map(mapToPendingAssessmentItem);
 
@@ -185,7 +183,7 @@ export class PatientFollowUpService {
     if (followUp.scheduleStatus === 'SCHEDULED') {
       throw new ConflictException('Lịch tái khám đã được đặt lịch');
     }
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prismaTx.$transaction(async (tx) => {
       const scheduledAt = new Date(body.scheduledAt);
       const endedAt = body.endedAt
         ? new Date(body.endedAt)
@@ -213,7 +211,7 @@ export class PatientFollowUpService {
         data: { scheduleStatus: 'SCHEDULED', scheduledAppointmentId: appointment.id },
         include: followUpInclude,
       });
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
 
     return mapToScheduleItem(updated);
   }

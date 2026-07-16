@@ -1,11 +1,20 @@
-import type { PatientTreatmentSession, Staff } from '@prisma/client';
+import type { PatientTreatmentSession, PatientTreatmentSessionImage, Staff } from '@prisma/client';
 import { formatDisplayDatetime } from '../../common/mapper-utils';
 
 type SessionWithStaff = PatientTreatmentSession & {
   doctor: Pick<Staff, 'fullName'> | null;
   ptKtv: Pick<Staff, 'fullName'> | null;
   performedBy: Pick<Staff, 'fullName'> | null;
+  images: PatientTreatmentSessionImage[];
 };
+/**
+ * interface response cho hình ảnh điều trị
+ */
+export interface TreatmentSessionImageResponse {
+  readonly id: string;
+  readonly imageUrl: string;
+  readonly sortOrder: number;
+}
 
 /**
  * interface response cho chức năng hiển thị danh sách điều trị chi tiết
@@ -24,6 +33,7 @@ export interface TreatmentSessionResponse {
   readonly nextTreatmentDate: string | null;
   readonly performedAt: string;
   readonly performedByName: string | null;
+  readonly images: TreatmentSessionImageResponse[];
 }
 
 /**
@@ -48,6 +58,7 @@ export interface TreatmentHistoryItemResponse {
   readonly serviceId: string;
   readonly serviceName: string;
   readonly sessionNumber: number;
+  readonly sessionTotal: number;
   readonly treatmentContent: string;
   readonly performedAt: string;
   readonly doctorName: string | null;
@@ -75,5 +86,10 @@ export function mapTreatmentSessionToResponse(session: SessionWithStaff): Treatm
       : null,
     performedAt: formatDisplayDatetime(session.performedAt),
     performedByName: session.performedBy?.fullName ?? null,
+    images: session.images.map((image) => ({
+      id: image.id,
+      imageUrl: image.imageUrl,
+      sortOrder: image.sortOrder,
+    })),
   };
 }

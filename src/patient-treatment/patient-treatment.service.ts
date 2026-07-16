@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
+import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
 import {
   calcCompletedSessions,
@@ -10,10 +13,20 @@ import {
 import {
   mapTreatmentSessionToResponse,
   TreatmentHistoryItemResponse,
+  TreatmentSessionImageResponse,
   TreatmentSessionListResponse,
   TreatmentSessionResponse,
 } from './mappers/treatment-session.mapper';
+import { randomUUID } from 'node:crypto';
 
+const MAX_TREATMENT_IMAGE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const MIME_EXTENSION: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 /**
  * Include cho session
  * Để lấy thông tin doctor, ptKtv, performedBy khi lấy danh sách điều trị chi tiết
@@ -22,11 +35,16 @@ const sessionInclude = {
   doctor: { select: { fullName: true } },
   ptKtv: { select: { fullName: true } },
   performedBy: { select: { fullName: true } },
+  images: { orderBy: { sortOrder: 'asc' } },
 } satisfies Prisma.PatientTreatmentSessionInclude;
 
 @Injectable()
 export class PatientTreatmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+    private readonly supabaseStorage: SupabaseStorageService,
+  ) {}
 
   /**
    * Find all sessions by service
@@ -59,27 +77,30 @@ export class PatientTreatmentService {
    * Find all sessions by patient
    */
   async findAllByPatient(patientId: string): Promise<TreatmentHistoryItemResponse[]> {
-    await this.ensurePatientExists(patientId);
-    // Lấy danh sách điều trị chi tiết
-    const sessions = await this.prisma.patientTreatmentSession.findMany({
-      where: {
-        patientServiceRecord: { patientId },
-      },
-      include: {
-        doctor: { select: { fullName: true } },
-        ptKtv: { select: { fullName: true } },
-        patientServiceRecord: {
-          select: {
-            id: true,
-            serviceName: true,
-            completedSessions: true,
-            treatmentCount: true,
-            quantity: true,
+    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
+    const [, sessions] = await Promise.all([
+      this.ensurePatientExists(patientId),
+      // Lấy danh sách điều trị chi tiết
+      this.prisma.patientTreatmentSession.findMany({
+        where: {
+          patientServiceRecord: { patientId },
+        },
+        include: {
+          doctor: { select: { fullName: true } },
+          ptKtv: { select: { fullName: true } },
+          patientServiceRecord: {
+            select: {
+              id: true,
+              serviceName: true,
+              completedSessions: true,
+              treatmentCount: true,
+              quantity: true,
+            },
           },
         },
-      },
-      orderBy: [{ performedAt: 'desc' }],
-    });
+        orderBy: [{ performedAt: 'desc' }],
+      }),
+    ]);
 
     return sessions.map((session) => {
       const sessionTotal = getSessionTotal(session.patientServiceRecord);
@@ -90,6 +111,7 @@ export class PatientTreatmentService {
         serviceId: session.patientServiceRecord.id,
         serviceName: session.patientServiceRecord.serviceName,
         sessionNumber: session.sessionNumber,
+        sessionTotal,
         treatmentContent: session.treatmentContent,
         performedAt: session.performedAt.toISOString(),
         doctorName: session.doctor?.fullName ?? null,
@@ -116,7 +138,7 @@ export class PatientTreatmentService {
 
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       const existing = await tx.patientTreatmentSession.findUnique({
         where: {
           patientServiceRecordId_sessionNumber: {
@@ -173,6 +195,87 @@ export class PatientTreatmentService {
       });
 
       return mapTreatmentSessionToResponse(saved);
+    }, PRISMA_TRANSACTION_OPTIONS);
+  }
+
+  /**
+   * Tải ảnh lên buổi điều trị
+   */
+  async uploadSessionImage(
+    patientId: string,
+    serviceId: string,
+    sessionNumber: number,
+    file: Express.Multer.File,
+    performedById: string,
+  ): Promise<TreatmentSessionImageResponse> {
+    const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
+    this.validateSessionNumber(service, sessionNumber);
+    const session = await this.ensureSessionForImageUpload(
+      serviceId,
+      sessionNumber,
+      performedById,
+    );
+    this.assertValidImageFile(file);
+    const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
+    const storagePath = `patients/${patientId}/treatment/${serviceId}/session-${sessionNumber}/${randomUUID()}.${extension}`;
+    const uploaded = await this.supabaseStorage.uploadObject(
+      storagePath,
+      file.buffer,
+      file.mimetype,
+    );
+    const sortOrder = await this.getNextSessionImageSortOrder(session.id);
+    const image = await this.prisma.patientTreatmentSessionImage.create({
+      data: {
+        patientTreatmentSessionId: session.id,
+        imageUrl: uploaded.publicUrl,
+        storagePath: uploaded.storagePath,
+        sortOrder,
+      },
+    });
+    return {
+      id: image.id,
+      imageUrl: image.imageUrl,
+      sortOrder: image.sortOrder,
+    };
+  }
+
+  /**
+   * Xóa ảnh buổi điều trị
+   */
+  async deleteSessionImage(
+    patientId: string,
+    serviceId: string,
+    sessionNumber: number,
+    imageId: string,
+  ): Promise<void> {
+    const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
+    this.validateSessionNumber(service, sessionNumber);
+    const session = await this.prisma.patientTreatmentSession.findUnique({
+      where: {
+        patientServiceRecordId_sessionNumber: {
+          patientServiceRecordId: serviceId,
+          sessionNumber,
+        },
+      },
+      select: { id: true },
+    });
+    if (!session) {
+      throw new NotFoundException('Buổi điều trị không tồn tại');
+    }
+    const image = await this.prisma.patientTreatmentSessionImage.findFirst({
+      where: {
+        id: imageId,
+        patientTreatmentSessionId: session.id,
+      },
+    });
+    if (!image) {
+      throw new NotFoundException('Ảnh không tồn tại');
+    }
+    if (image.storagePath) {
+      await this.supabaseStorage.removeObject(image.storagePath);
+    }
+    await this.prisma.patientTreatmentSessionImage.delete({
+      where: { id: imageId },
     });
   }
 
@@ -244,5 +347,58 @@ export class PatientTreatmentService {
     if (!staff?.isActive) {
       throw new BadRequestException(`${label} không hợp lệ`);
     }
+  }
+
+  private assertValidImageFile(file: Express.Multer.File): void {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Vui lòng chọn file ảnh');
+    }
+
+    if (file.size > MAX_TREATMENT_IMAGE_BYTES) {
+      throw new BadRequestException('Ảnh không được vượt quá 10MB');
+    }
+
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Chỉ chấp nhận ảnh JPEG, PNG, WebP, GIF');
+    }
+  }
+
+  private async getNextSessionImageSortOrder(sessionId: string): Promise<number> {
+    const aggregate = await this.prisma.patientTreatmentSessionImage.aggregate({
+      where: { patientTreatmentSessionId: sessionId },
+      _max: { sortOrder: true },
+    });
+
+    return (aggregate._max?.sortOrder ?? -1) + 1;
+  }
+
+  /** Tạo buổi tối thiểu nếu chưa lưu — cho phép upload ảnh trước khi nhập nội dung */
+  private async ensureSessionForImageUpload(
+    serviceId: string,
+    sessionNumber: number,
+    performedById: string,
+  ): Promise<{ id: string }> {
+    const existing = await this.prisma.patientTreatmentSession.findUnique({
+      where: {
+        patientServiceRecordId_sessionNumber: {
+          patientServiceRecordId: serviceId,
+          sessionNumber,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) return existing;
+
+    return this.prisma.patientTreatmentSession.create({
+      data: {
+        patientServiceRecordId: serviceId,
+        sessionNumber,
+        treatmentContent: '',
+        performedAt: new Date(),
+        performedById,
+      },
+      select: { id: true },
+    });
   }
 }

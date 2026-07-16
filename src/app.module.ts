@@ -24,6 +24,7 @@ import { MedicineModule } from './medicine/medicine.module';
 import { PatientServiceModule } from './patient-service/patient-service.module';
 import { PatientPaymentModule } from './patient-payment/patient-payment.module';
 import { PatientTreatmentModule } from './patient-treatment/patient-treatment.module';
+import { StaffShiftModule } from './staff-shift/staff-shift.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { PatientTreatmentModule } from './patient-treatment/patient-treatment.mo
     PatientServiceModule,
     PatientPaymentModule,
     PatientTreatmentModule,
+    StaffShiftModule,
   ],
   controllers: [AppController],
   providers: [

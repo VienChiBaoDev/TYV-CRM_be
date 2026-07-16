@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import {
   PatientServiceResponse,
@@ -27,16 +29,21 @@ const recordInclude = {
 
 @Injectable()
 export class PatientServiceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+  ) {}
   // Lấy danh sách dịch vụ của bệnh nhân
   async findAllByPatient(patientId: string): Promise<PatientServiceResponse[]> {
-    await this.ensurePatientExists(patientId);
-
-    const records = await this.prisma.patientServiceRecord.findMany({
-      where: { patientId },
-      include: recordInclude,
-      orderBy: { finalizedAt: 'desc' },
-    });
+    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
+    const [, records] = await Promise.all([
+      this.ensurePatientExists(patientId),
+      this.prisma.patientServiceRecord.findMany({
+        where: { patientId },
+        include: recordInclude,
+        orderBy: { finalizedAt: 'desc' },
+      }),
+    ]);
 
     return records.map(mapPatientServiceToResponse);
   }
@@ -146,14 +153,14 @@ export class PatientServiceService {
       throw new BadRequestException('Dịch vụ đã được hủy');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       await cancelPatientServiceRecord(tx, serviceId, cancelledById);
       const updated = await tx.patientServiceRecord.findUniqueOrThrow({
         where: { id: serviceId },
         include: recordInclude,
       });
       return mapPatientServiceToResponse(updated);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async update(

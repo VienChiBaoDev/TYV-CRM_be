@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientPaymentDto, PATIENT_PAYMENT_METHOD } from './dto/create-patient-payment.dto';
 import {
   mapPatientPaymentToResponse,
@@ -25,13 +27,16 @@ const paymentInclude = {
 // dịch vụ thanh toán
 @Injectable()
 export class PatientPaymentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prismaTx: PrismaTransactionService,
+  ) {}
 
   // tìm tất cả thanh toán của một bệnh nhân
   async findAllByPatient(patientId: string): Promise<PatientPaymentsListResponse> {
-    await this.ensurePatientExists(patientId);
-
-    const [payments, aggregate] = await Promise.all([
+    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
+    const [, payments, aggregate] = await Promise.all([
+      this.ensurePatientExists(patientId),
       this.prisma.patientPayment.findMany({
         where: { patientId },
         include: paymentInclude,
@@ -62,7 +67,7 @@ export class PatientPaymentService {
   ): Promise<PatientPaymentResponse> {
     await this.ensurePatientExists(patientId);
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       // serviceIds: danh sách id dịch vụ thanh toán
       const serviceIds = dto.items.map((item) => item.patientServiceRecordId);
       // services: danh sách dịch vụ thanh toán
@@ -134,7 +139,7 @@ export class PatientPaymentService {
       }
       // chuyển đổi dữ liệu thanh toán thành dữ liệu để hiển thị
       return mapPatientPaymentToResponse(payment);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   async createRefund(
@@ -144,7 +149,7 @@ export class PatientPaymentService {
   ): Promise<PatientPaymentResponse> {
     await this.ensurePatientExists(patientId);
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prismaTx.$transaction(async (tx) => {
       const serviceIds = dto.items.map((i) => i.patientServiceRecordId);
       // kết quả trả ra: serviceIds = [serviceId1, serviceId2, serviceId3]
       const services = await tx.patientServiceRecord.findMany({
@@ -216,7 +221,7 @@ export class PatientPaymentService {
       }
 
       return mapPatientPaymentToResponse(payment);
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
   }
 
   private async generateRefundVoucherCode(tx: Prisma.TransactionClient): Promise<string> {
