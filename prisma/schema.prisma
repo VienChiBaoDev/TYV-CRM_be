@@ -37,6 +37,7 @@ model Staff {
   treatmentSessionsAsPerformedBy PatientTreatmentSession[] @relation("TreatmentSessionPerformedBy")
   
   shifts StaffShift[]
+  assignedPatients Patient[] @relation("PatientAssignedStaff")
 
   @@index([role])
   @@index([clinicBranch])
