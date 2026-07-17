@@ -149,12 +149,18 @@ model MedicalVisit {
 
 /// Thành phần thuốc trong đơn của một lượt khám
 model VisitHerb {
-  id        String       @id @default(uuid()) @db.Uuid
-  visitId   String       @map("visit_id") @db.Uuid
-  name      String
-  weight    String
-  sortOrder Int          @default(0) @map("sort_order")
-  visit     MedicalVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id         String        @id @default(uuid()) @db.Uuid
+  visitId    String        @map("visit_id") @db.Uuid
+  medicineId String?       @map("medicine_id") @db.Uuid
+  name       String
+  weight     String
+  unit       String?
+  quantity   Decimal?      @db.Decimal(12, 3)
+  unitPrice  Decimal?      @map("unit_price") @db.Decimal(12, 2)
+  lineTotal  Decimal?      @map("line_total") @db.Decimal(12, 2)
+  sortOrder  Int           @default(0) @map("sort_order")
+  visit      MedicalVisit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  medicine   Medicine?     @relation(fields: [medicineId], references: [id], onDelete: SetNull)
 
   @@index([visitId, sortOrder])
   @@map("visit_herbs")
@@ -293,13 +299,15 @@ model CatalogService {
 
 /// Kho thuốc — dùng khi kê đơn trong lượt khám
 model Medicine {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  unit      String
-  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
-  category  String?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  unit       String
+  unitPrice  Decimal     @map("unit_price") @db.Decimal(12, 2)
+  category   String?
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  visitHerbs VisitHerb[]
+
   @@index([name])
   @@index([unit])
   @@map("medicines")

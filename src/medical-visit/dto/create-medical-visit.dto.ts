@@ -5,8 +5,10 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -40,6 +42,33 @@ export class VisitHerbDto {
   @IsString()
   @MaxLength(100)
   weight!: string;
+
+  @IsOptional()
+  @IsUUID()
+  medicineId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  unit?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  quantity?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  lineTotal?: number;
 }
 
 export class VisitClinicalImageDto {

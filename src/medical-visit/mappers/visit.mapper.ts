@@ -57,6 +57,20 @@ export function resolveClinicBranchFromLocation(location: string): ClinicBranch 
   return LOCATION_TO_CLINIC_BRANCH[location] ?? ClinicBranch.HANG_BONG;
 }
 
+export function mapVisitHerbToResponse(herb: VisitHerb): VisitHerbResponse {
+  return {
+    id: herb.id,
+    name: herb.name,
+    weight: herb.weight,
+    sortOrder: herb.sortOrder,
+    medicineId: herb.medicineId,
+    unit: herb.unit,
+    quantity: herb.quantity != null ? herb.quantity.toNumber() : null,
+    unitPrice: herb.unitPrice != null ? herb.unitPrice.toNumber() : null,
+    lineTotal: herb.lineTotal != null ? herb.lineTotal.toNumber() : null,
+  };
+}
+
 export function toCustomerStatus(treatmentStatus: TreatmentStatusApi): CustomerStatus {
   return TREATMENT_STATUS_TO_CUSTOMER_STATUS[treatmentStatus];
 }
@@ -66,6 +80,11 @@ export interface VisitHerbResponse {
   readonly name: string;
   readonly weight: string;
   readonly sortOrder: number;
+  readonly medicineId: string | null;
+  readonly unit: string | null;
+  readonly quantity: number | null;
+  readonly unitPrice: number | null;
+  readonly lineTotal: number | null;
 }
 
 export interface VisitClinicalImageResponse {
@@ -166,12 +185,7 @@ export function mapVisitToResponse(visit: VisitWithRelations): MedicalVisitRespo
     prescriptionDosage: visit.prescriptionDosage,
     labResults: visit.labResults,
     status: visit.status,
-    herbs: visit.herbs.map((herb) => ({
-      id: herb.id,
-      name: herb.name,
-      weight: herb.weight,
-      sortOrder: herb.sortOrder,
-    })),
+    herbs: visit.herbs.map(mapVisitHerbToResponse),
     clinicalImages: visit.clinicalImages.map((image) => ({
       id: image.id,
       imageUrl: image.imageUrl,
