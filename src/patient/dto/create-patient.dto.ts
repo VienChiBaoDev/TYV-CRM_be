@@ -1,5 +1,6 @@
 import { ClinicBranch, Gender } from '@prisma/client';
 import {
+  IsArray,
   IsEnum,
   IsISO8601,
   IsOptional,
@@ -49,4 +50,9 @@ export class CreatePatientDto {
   @IsOptional()
   @IsUUID()
   referrerId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  assignedStaffIds?: string[];
 }

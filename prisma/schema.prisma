@@ -87,6 +87,7 @@ model Patient {
   
   payments         PatientPayment[]
   medicalCase      MedicalCase?
+  assignedStaff    Staff[]                @relation("PatientAssignedStaff")
 
   @@index([fullName])
   @@index([phone])
