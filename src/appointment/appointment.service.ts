@@ -4,7 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, ClinicBranch, Prisma, VisitMode, VisitStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  ClinicBranch,
+  Prisma,
+  StaffRole,
+  VisitMode,
+  VisitStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
@@ -30,6 +37,7 @@ interface FindAppointmentsParams {
   status?: AppointmentStatus;
   from?: string;
   to?: string;
+  doctorId?: string;
 }
 
 interface ResolvedStaffNames {
@@ -74,10 +82,19 @@ export class AppointmentService {
     });
   }
 
-  findAll(params: FindAppointmentsParams) {
+  async findAll(params: FindAppointmentsParams) {
+    const doctorName = params.doctorId
+      ? await this.resolveDoctorFilterName(params.doctorId)
+      : undefined;
+
+    if (params.doctorId && !doctorName) {
+      return [];
+    }
+
     const where: Prisma.AppointmentWhereInput = {
       ...(params.branch ? { clinicBranch: params.branch } : {}),
       ...(params.status ? { status: params.status } : {}),
+      ...(doctorName ? { doctorName } : {}),
       ...(params.from || params.to
         ? {
             scheduledAt: {
@@ -275,6 +292,20 @@ export class AppointmentService {
         staffLabel: 'Trợ lý',
       });
     }
+  }
+
+  /**
+   * Lấy tên bác sĩ để lọc danh sách lịch hẹn. Trả về null nếu không hợp lệ.
+   */
+  private async resolveDoctorFilterName(doctorId: string): Promise<string | null> {
+    const doctor = await this.prisma.staff.findUnique({
+      where: { id: doctorId },
+      select: { fullName: true, role: true, isActive: true },
+    });
+    if (!doctor?.isActive || doctor.role !== StaffRole.DOCTOR) {
+      return null;
+    }
+    return doctor.fullName;
   }
 
   /**
