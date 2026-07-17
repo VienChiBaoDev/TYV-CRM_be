@@ -24,3 +24,29 @@ export function rangesOverlap(a: TimeRange, b: TimeRange): boolean {
 export function shouldCheckWorkOverlap(type: StaffShiftType): boolean {
   return type === StaffShiftType.WORK;
 }
+
+/**
+ * Toàn bộ khoảng target có nằm trong hợp các ca WORK chồng/overlap không?
+ * Hỗ trợ ca sáng + ca chiều; fail nếu có gap (vd: nghỉ trưa 12:00–13:30).
+ */
+export function isRangeCoveredByWorkShifts(target: TimeRange, workShifts: TimeRange[]): boolean {
+  const overlapping = workShifts
+    .filter((shift) => rangesOverlap(target, shift))
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+
+  let cursor = target.startAt;
+
+  for (const shift of overlapping) {
+    if (shift.startAt > cursor) {
+      return false; // gap
+    }
+    if (shift.endAt > cursor) {
+      cursor = shift.endAt;
+    }
+    if (cursor >= target.endAt) {
+      return true;
+    }
+  }
+
+  return cursor >= target.endAt;
+}

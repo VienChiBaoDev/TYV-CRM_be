@@ -15,12 +15,15 @@ import {
   CHECK_IN_ALLOWED_STATUSES,
 } from './appointment-status.rules';
 import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
+import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 
 // record để mapping branch với location
 const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
   [ClinicBranch.HANG_BONG]: 'Hàng Bông',
   [ClinicBranch.CAU_GIAY]: 'Cầu Giấy',
 };
+
+const DEFAULT_BRANCH = ClinicBranch.HANG_BONG;
 
 interface FindAppointmentsParams {
   branch?: ClinicBranch;
@@ -29,24 +32,43 @@ interface FindAppointmentsParams {
   to?: string;
 }
 
+interface ResolvedStaffNames {
+  doctorName: string;
+  assistantName: string | null;
+}
+
 @Injectable()
 export class AppointmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly prismaTx: PrismaTransactionService,
+    private readonly staffShiftService: StaffShiftService,
   ) {}
 
-  create(dto: CreateAppointmentDto) {
+  async create(dto: CreateAppointmentDto) {
     this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
+    const startAt = new Date(dto.scheduledAt);
+    const endAt = new Date(dto.endedAt);
+    const branch = dto.clinicBranch ?? DEFAULT_BRANCH;
+
+    await this.assertAssignedStaffAvailable({
+      doctorId: dto.doctorId,
+      assistantId: dto.assistantId,
+      startAt,
+      endAt,
+      branch,
+    });
+
+    const names = await this.resolveStaffNames(dto.doctorId, dto.assistantId);
 
     return this.prisma.appointment.create({
       data: {
         patientId: dto.patientId,
-        scheduledAt: new Date(dto.scheduledAt),
-        endedAt: new Date(dto.endedAt),
-        doctorName: dto.doctorName,
-        assistantName: dto.assistantName,
-        clinicBranch: dto.clinicBranch,
+        scheduledAt: startAt,
+        endedAt: endAt,
+        doctorName: names.doctorName,
+        assistantName: names.assistantName,
+        clinicBranch: branch,
         note: dto.note,
       },
     });
@@ -65,7 +87,6 @@ export class AppointmentService {
           }
         : {}),
     };
-
     return this.prisma.appointment.findMany({
       where,
       orderBy: { scheduledAt: 'asc' },
@@ -86,47 +107,84 @@ export class AppointmentService {
         },
       },
     });
-
     if (!appointment) {
       throw new NotFoundException('Không tìm thấy lịch hẹn');
     }
-
     return appointment;
   }
 
   async update(id: string, dto: UpdateAppointmentDto) {
     const current = await this.findOne(id);
-
     if (dto.scheduledAt && dto.endedAt) {
-      // Kiểm tra giờ bắt đầu và giờ kết thúc có hợp lệ
       this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     } else if (dto.scheduledAt || dto.endedAt) {
-      // Nếu giờ bắt đầu hoặc giờ kết thúc không được cung cấp, sử dụng giờ bắt đầu và giờ kết thúc của lịch hẹn hiện tại
       const scheduledAt = dto.scheduledAt ?? current.scheduledAt.toISOString();
       const endedAt = dto.endedAt ?? current.endedAt.toISOString();
       this.assertValidTimeRange(scheduledAt, endedAt);
     }
-
     if (dto.status) {
       assertAppointmentStatusTransition(current.status, dto.status, current.visitId);
     }
-
     if (dto.visitId !== undefined) {
       throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
     }
-
+    // nếu không phải là hủy lịch hẹn, kiểm tra xem có cần kiểm tra ca làm của nhân viên không.
     const isCancelling = dto.status === AppointmentStatus.CANCELLED;
-
+    if (!isCancelling && this.shouldValidateStaffShift(dto)) {
+      // nếu cần kiểm tra ca làm của nhân viên, lấy giờ bắt đầu và giờ kết thúc từ dto hoặc từ lịch hẹn hiện tại.
+      const startAt = new Date(dto.scheduledAt ?? current.scheduledAt);
+      const endAt = new Date(dto.endedAt ?? current.endedAt);
+      const branch = dto.clinicBranch ?? current.clinicBranch;
+      // lấy id của bác sĩ được gán từ dto hoặc từ lịch hẹn hiện tại.
+      const doctorId = await this.resolveDoctorId(
+        dto.doctorId,
+        dto.doctorName ?? current.doctorName,
+      );
+      // lấy id của trợ lý được gán từ dto hoặc từ lịch hẹn hiện tại.
+      const assistantId = await this.resolveOptionalStaffId(
+        dto.assistantId,
+        dto.assistantName !== undefined ? dto.assistantName : current.assistantName,
+      );
+      // kiểm tra xem ca làm của nhân viên có phù hợp không.
+      await this.assertAssignedStaffAvailable({
+        doctorId,
+        assistantId,
+        startAt,
+        endAt,
+        branch,
+      });
+    }
+    // lấy tên của nhân viên được gán từ dto hoặc từ lịch hẹn hiện tại.
+    const resolvedNames =
+      dto.doctorId || dto.assistantId !== undefined
+        ? // nếu có id của bác sĩ hoặc trợ lý được gán từ dto, lấy tên của nhân viên được gán.s
+          await this.resolveStaffNames(
+            // lấy id của bác sĩ được gán từ dto hoặc từ lịch hẹn hiện tại.
+            await this.resolveDoctorId(dto.doctorId, dto.doctorName ?? current.doctorName),
+            // lấy id của trợ lý được gán từ dto hoặc từ lịch hẹn hiện tại.
+            await this.resolveOptionalStaffId(
+              dto.assistantId,
+              dto.assistantName !== undefined ? dto.assistantName : current.assistantName,
+            ),
+          )
+        : null;
+    // nếu là hủy lịch hẹn, cập nhật trạng thái lịch hẹn thành CANCELLED.
     if (isCancelling) {
       return this.prismaTx.$transaction(async (tx) => {
         const updated = await tx.appointment.update({
+          // cập nhật trạng thái lịch hẹn thành CANCELLED.
           where: { id },
           data: {
             ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
             ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
-            ...(dto.doctorName !== undefined ? { doctorName: dto.doctorName } : {}),
-            ...(dto.assistantName !== undefined ? { assistantName: dto.assistantName } : {}),
+            ...(resolvedNames ? { doctorName: resolvedNames.doctorName } : {}),
+            ...(resolvedNames
+              ? { assistantName: resolvedNames.assistantName }
+              : dto.assistantName !== undefined
+                ? { assistantName: dto.assistantName }
+                : {}),
             ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+            // cập nhật trạng thái lịch hẹn thành CANCELLED.
             status: AppointmentStatus.CANCELLED,
             ...(dto.note !== undefined ? { note: dto.note } : {}),
           },
@@ -146,14 +204,17 @@ export class AppointmentService {
         return updated;
       }, PRISMA_TRANSACTION_OPTIONS);
     }
-
     return this.prisma.appointment.update({
       where: { id },
       data: {
         ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
         ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
-        ...(dto.doctorName !== undefined ? { doctorName: dto.doctorName } : {}),
-        ...(dto.assistantName !== undefined ? { assistantName: dto.assistantName } : {}),
+        ...(resolvedNames ? { doctorName: resolvedNames.doctorName } : {}),
+        ...(resolvedNames
+          ? { assistantName: resolvedNames.assistantName }
+          : dto.assistantName !== undefined
+            ? { assistantName: dto.assistantName }
+            : {}),
         ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
         ...(dto.status ? { status: dto.status } : {}),
         ...(dto.note !== undefined ? { note: dto.note } : {}),
@@ -171,6 +232,124 @@ export class AppointmentService {
     return this.prisma.appointment.delete({ where: { id } });
   }
 
+  /**
+   * Kiểm tra xem có cần kiểm tra ca làm của nhân viên không.
+   * Nếu có, trả về true, ngược lại trả về false.
+   */
+  private shouldValidateStaffShift(dto: UpdateAppointmentDto): boolean {
+    return Boolean(
+      dto.scheduledAt ||
+      dto.endedAt ||
+      dto.doctorId ||
+      dto.assistantId !== undefined ||
+      dto.doctorName !== undefined ||
+      dto.assistantName !== undefined ||
+      dto.clinicBranch,
+    );
+  }
+  /**
+   * Kiểm tra xem nhân viên được gán có ca làm phù hợp trong khung giờ này không.
+   * Nếu không, throw lỗi.
+   */
+  private async assertAssignedStaffAvailable(params: {
+    doctorId: string;
+    assistantId?: string | null;
+    startAt: Date;
+    endAt: Date;
+    branch: ClinicBranch;
+  }): Promise<void> {
+    const { doctorId, assistantId, startAt, endAt, branch } = params;
+    await this.staffShiftService.assertStaffAvailableForAppointment({
+      staffId: doctorId,
+      startAt,
+      endAt,
+      branch,
+      staffLabel: 'Bác sĩ',
+    });
+    if (assistantId) {
+      await this.staffShiftService.assertStaffAvailableForAppointment({
+        staffId: assistantId,
+        startAt,
+        endAt,
+        branch,
+        staffLabel: 'Trợ lý',
+      });
+    }
+  }
+
+  /**
+   * Lấy tên của nhân viên được gán.
+   * Nếu không có trợ lý, trả về tên của bác sĩ và null cho trợ lý.
+   * Nếu không tìm thấy nhân viên, throw lỗi.
+   */
+  private async resolveStaffNames(
+    doctorId: string,
+    assistantId?: string | null,
+  ): Promise<ResolvedStaffNames> {
+    const doctor = await this.prisma.staff.findUnique({
+      where: { id: doctorId },
+      select: { fullName: true, isActive: true },
+    });
+    if (!doctor?.isActive) {
+      throw new BadRequestException('Không tìm thấy bác sĩ hoặc đã ngừng hoạt động');
+    }
+    if (!assistantId) {
+      return { doctorName: doctor.fullName, assistantName: null };
+    }
+    const assistant = await this.prisma.staff.findUnique({
+      where: { id: assistantId },
+      select: { fullName: true, isActive: true },
+    });
+    if (!assistant?.isActive) {
+      throw new BadRequestException('Không tìm thấy trợ lý hoặc đã ngừng hoạt động');
+    }
+    return {
+      doctorName: doctor.fullName,
+      assistantName: assistant.fullName,
+    };
+  }
+
+  /**
+   * Lấy id của bác sĩ được gán.
+   * Nếu không có id, throw lỗi.
+   */
+  private async resolveDoctorId(doctorId?: string, doctorName?: string | null): Promise<string> {
+    if (doctorId) return doctorId;
+    if (!doctorName?.trim()) {
+      throw new BadRequestException('Vui lòng chọn bác sĩ');
+    }
+    const staff = await this.prisma.staff.findFirst({
+      where: { fullName: doctorName.trim(), isActive: true },
+      select: { id: true },
+    });
+    if (!staff) {
+      throw new BadRequestException('Không tìm thấy bác sĩ');
+    }
+    return staff.id;
+  }
+
+  /**
+   * Lấy id của nhân viên được gán.
+   * Nếu không có id, trả về null.
+   * Nếu không tìm thấy nhân viên, throw lỗi.
+   */
+  private async resolveOptionalStaffId(
+    staffId?: string,
+    staffName?: string | null,
+  ): Promise<string | null> {
+    if (staffId) return staffId;
+    if (!staffName?.trim()) return null;
+    const staff = await this.prisma.staff.findFirst({
+      where: { fullName: staffName.trim(), isActive: true },
+      select: { id: true },
+    });
+    return staff?.id ?? null;
+  }
+
+  /**
+   * Kiểm tra xem giờ bắt đầu và giờ kết thúc có hợp lệ không.
+   * Nếu không, throw lỗi.
+   */
   private assertValidTimeRange(scheduledAt: string, endedAt: string): void {
     const start = new Date(scheduledAt);
     const end = new Date(endedAt);

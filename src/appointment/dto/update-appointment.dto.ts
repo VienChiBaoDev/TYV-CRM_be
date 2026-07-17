@@ -1,12 +1,5 @@
 import { AppointmentStatus, ClinicBranch } from '@prisma/client';
-import {
-  IsEnum,
-  IsISO8601,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateAppointmentDto {
   @IsOptional()
@@ -16,6 +9,14 @@ export class UpdateAppointmentDto {
   @IsOptional()
   @IsISO8601()
   endedAt?: string;
+
+  @IsOptional()
+  @IsUUID()
+  doctorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assistantId?: string;
 
   @IsOptional()
   @IsString()
