@@ -69,6 +69,16 @@ export class VisitHerbDto {
   @IsNumber()
   @Min(0)
   lineTotal?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  decoctionOrder?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  decoctionPrep?: string;
 }
 
 export class VisitClinicalImageDto {
@@ -124,7 +134,6 @@ export class CreateVisitBodyDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(5000)
   symptoms?: string;
 
   @IsOptional()
@@ -144,7 +153,6 @@ export class CreateVisitBodyDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
   labResults?: string;
 
   @IsOptional()

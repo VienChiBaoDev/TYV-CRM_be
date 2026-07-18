@@ -68,6 +68,8 @@ export function mapVisitHerbToResponse(herb: VisitHerb): VisitHerbResponse {
     quantity: herb.quantity != null ? herb.quantity.toNumber() : null,
     unitPrice: herb.unitPrice != null ? herb.unitPrice.toNumber() : null,
     lineTotal: herb.lineTotal != null ? herb.lineTotal.toNumber() : null,
+    decoctionOrder: herb.decoctionOrder,
+    decoctionPrep: herb.decoctionPrep,
   };
 }
 
@@ -85,6 +87,8 @@ export interface VisitHerbResponse {
   readonly quantity: number | null;
   readonly unitPrice: number | null;
   readonly lineTotal: number | null;
+  readonly decoctionOrder: string | null;
+  readonly decoctionPrep: string | null;
 }
 
 export interface VisitClinicalImageResponse {

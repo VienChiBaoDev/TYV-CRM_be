@@ -474,6 +474,8 @@ export class MedicalVisitService {
       quantity: herb.quantity,
       unitPrice: herb.unitPrice,
       lineTotal: herb.lineTotal,
+      decoctionOrder: herb.decoctionOrder,
+      decoctionPrep: herb.decoctionPrep,
       ...(herb.medicineId
         ? { medicine: { connect: { id: herb.medicineId } } }
         : {}),
@@ -493,6 +495,8 @@ export class MedicalVisitService {
       quantity: herb.quantity ?? null,
       unitPrice: herb.unitPrice ?? null,
       lineTotal: herb.lineTotal ?? null,
+      decoctionOrder: herb.decoctionOrder ?? null,
+      decoctionPrep: herb.decoctionPrep ?? null,
       sortOrder: index,
     }));
   }
