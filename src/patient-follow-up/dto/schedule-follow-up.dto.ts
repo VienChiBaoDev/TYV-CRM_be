@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class ScheduleFollowUpDto {
   // thời gian bắt đầu
@@ -8,6 +8,13 @@ export class ScheduleFollowUpDto {
   @IsOptional()
   @IsISO8601()
   endedAt?: string;
+
+  @IsUUID()
+  doctorId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  assistantId?: string;
 
   @IsOptional()
   @IsString()
