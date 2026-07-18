@@ -39,8 +39,6 @@ model Staff {
   shifts StaffShift[]
   assignedPatients Patient[] @relation("PatientAssignedStaff")
 
-  assignedPatients Patient[] @relation("PatientAssignedStaff")
-
   @@index([role])
   @@index([clinicBranch])
   @@map("staff")
