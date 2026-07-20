@@ -230,6 +230,8 @@ export class PatientFollowUpService {
           patientId: followUp.patientId,
           scheduledAt,
           endedAt,
+          doctorId: body.doctorId,
+          assistantId: body.assistantId ?? null,
           doctorName: doctor?.fullName ?? body.doctorName ?? followUp.physicianInCharge,
           assistantName: assistant?.fullName ?? body.assistantName ?? null,
           clinicBranch: followUp.facility,

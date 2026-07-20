@@ -39,6 +39,9 @@ model Staff {
   shifts StaffShift[]
   assignedPatients Patient[] @relation("PatientAssignedStaff")
 
+  doctorAppointments    Appointment[] @relation("AppointmentDoctor")
+  assistantAppointments Appointment[] @relation("AppointmentAssistant")
+
   @@index([role])
   @@index([clinicBranch])
   @@map("staff")
@@ -225,25 +228,32 @@ model PatientFollowUp {
 }
 
 model Appointment {
-  id           String            @id @default(uuid()) @db.Uuid
-  patientId    String            @map("patient_id") @db.Uuid
-  scheduledAt  DateTime          @map("scheduled_at") @db.Timestamptz(6)
-  endedAt      DateTime          @map("ended_at") @db.Timestamptz(6)
-  doctorName     String?           @map("doctor_name")
-  assistantName  String?           @map("assistant_name")
-  clinicBranch ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
-  status       AppointmentStatus @default(BOOKED)
-  note         String?
-  visitId      String?           @map("visit_id") @db.Uuid
-  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id            String            @id @default(uuid()) @db.Uuid
+  patientId     String            @map("patient_id") @db.Uuid
+  scheduledAt   DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  endedAt       DateTime          @map("ended_at") @db.Timestamptz(6)
+  doctorId      String?           @map("doctor_id") @db.Uuid
+  assistantId   String?           @map("assistant_id") @db.Uuid
+  doctorName    String?           @map("doctor_name")
+  assistantName String?           @map("assistant_name")
+  clinicBranch  ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  status        AppointmentStatus @default(BOOKED)
+  note          String?
+  visitId       String?           @map("visit_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor    Staff?  @relation("AppointmentDoctor", fields: [doctorId], references: [id])
+  assistant Staff?  @relation("AppointmentAssistant", fields: [assistantId], references: [id])
 
   followUpScheduled PatientFollowUp? @relation("FollowUpScheduledAppointment")
 
   @@index([patientId])
   @@index([scheduledAt])
   @@index([status])
+  @@index([doctorId, scheduledAt])
+  @@index([assistantId, scheduledAt])
   @@map("appointments")
 }
 
