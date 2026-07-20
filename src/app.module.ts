@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
+import { BankAccountModule } from './bank-account/bank-account.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { MedicalCaseModule } from './medical-case/medical-case.module';
@@ -60,6 +61,7 @@ import { StaffShiftModule } from './staff-shift/staff-shift.module';
     PatientPaymentModule,
     PatientTreatmentModule,
     StaffShiftModule,
+    BankAccountModule,
   ],
   controllers: [AppController],
   providers: [
