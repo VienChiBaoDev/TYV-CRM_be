@@ -25,6 +25,7 @@ import { PatientServiceModule } from './patient-service/patient-service.module';
 import { PatientPaymentModule } from './patient-payment/patient-payment.module';
 import { PatientTreatmentModule } from './patient-treatment/patient-treatment.module';
 import { StaffShiftModule } from './staff-shift/staff-shift.module';
+import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { StaffShiftModule } from './staff-shift/staff-shift.module';
     PatientPaymentModule,
     PatientTreatmentModule,
     StaffShiftModule,
+    PrescriptionFormulaTemplateModule,
   ],
   controllers: [AppController],
   providers: [
