@@ -27,6 +27,7 @@ import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
 import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
 import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
+import { AppointmentService } from 'src/appointment/appointment.service';
 
 const followUpInclude = {
   patient: {
@@ -40,6 +41,7 @@ export class PatientFollowUpService {
     private readonly prisma: PrismaService,
     private readonly prismaTx: PrismaTransactionService,
     private readonly staffShiftService: StaffShiftService,
+    private readonly appointmentService: AppointmentService,
   ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
@@ -223,6 +225,13 @@ export class PatientFollowUpService {
           select: { fullName: true },
         })
       : null;
+
+    await this.appointmentService.assertNoSchedulingConflict({
+      doctorId: body.doctorId,
+      assistantId: body.assistantId,
+      startAt: scheduledAt,
+      endAt: endedAt,
+    });
 
     const updated = await this.prismaTx.$transaction(async (tx) => {
       const appointment = await tx.appointment.create({

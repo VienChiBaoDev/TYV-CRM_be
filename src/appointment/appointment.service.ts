@@ -23,6 +23,7 @@ import {
 } from './appointment-status.rules';
 import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
+import { BLOCKING_APPOINTMENT_STATUSES } from './appointment-overlap.rules';
 
 // record để mapping branch với location
 const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
@@ -50,6 +51,14 @@ interface StaffAssignment extends ResolvedStaffNames {
   assistantId: string | null;
 }
 
+interface AssertNoSchedulingConflictParams {
+  doctorId: string;
+  assistantId?: string | null;
+  startAt: Date;
+  endAt: Date;
+  exceptAppointmentId?: string;
+}
+
 @Injectable()
 export class AppointmentService {
   constructor(
@@ -70,6 +79,13 @@ export class AppointmentService {
       startAt,
       endAt,
       branch,
+    });
+
+    await this.assertNoSchedulingConflict({
+      doctorId: dto.doctorId,
+      assistantId: dto.assistantId,
+      startAt,
+      endAt,
     });
 
     const assignment = await this.resolveStaffAssignment(dto.doctorId, dto.assistantId);
@@ -154,7 +170,7 @@ export class AppointmentService {
     if (dto.visitId !== undefined) {
       throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
     }
-    // nếu không phải là hủy lịch hẹn, kiểm tra xem có cần kiểm tra ca làm của nhân viên không.
+    // nếu không phải là hủy lịch hẹn, kiểm tra xem có cần kiểm tra ca làm của nhân viên không và kiểm tra xem có lịch hẹn nào trùng khung giờ với lịch hẹn đang xét không.
     const isCancelling = dto.status === AppointmentStatus.CANCELLED;
     if (!isCancelling && this.shouldValidateStaffShift(dto)) {
       const startAt = new Date(dto.scheduledAt ?? current.scheduledAt);
@@ -177,12 +193,17 @@ export class AppointmentService {
         endAt,
         branch,
       });
+      await this.assertNoSchedulingConflict({
+        doctorId,
+        assistantId,
+        startAt,
+        endAt,
+        exceptAppointmentId: id,
+      });
     }
 
     const staffAssignment =
-      dto.doctorId ||
-      dto.assistantId !== undefined ||
-      this.shouldValidateStaffShift(dto)
+      dto.doctorId || dto.assistantId !== undefined || this.shouldValidateStaffShift(dto)
         ? await this.resolveStaffAssignment(
             await this.resolveDoctorId(
               dto.doctorId,
@@ -257,6 +278,33 @@ export class AppointmentService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.appointment.delete({ where: { id } });
+  }
+
+  /**
+   * Phase 3: chặn 2 lịch BN chồng giờ cùng bác sĩ / trợ lý.
+   */
+  async assertNoSchedulingConflict(params: AssertNoSchedulingConflictParams): Promise<void> {
+    const { doctorId, assistantId, startAt, endAt, exceptAppointmentId } = params;
+
+    await this.assertNoStaffAppointmentOverlap({
+      staffId: doctorId,
+      field: 'doctorId',
+      startAt,
+      endAt,
+      exceptAppointmentId,
+      staffLabel: 'Bác sĩ',
+    });
+
+    if (assistantId) {
+      await this.assertNoStaffAppointmentOverlap({
+        staffId: assistantId,
+        field: 'assistantId',
+        startAt,
+        endAt,
+        exceptAppointmentId,
+        staffLabel: 'Trợ lý',
+      });
+    }
   }
 
   /**
@@ -463,5 +511,39 @@ export class AppointmentService {
         },
       });
     }, PRISMA_TRANSACTION_OPTIONS);
+  }
+  /**
+   * Kiểm tra xem có lịch hẹn nào trùng khung giờ với lịch hẹn đang xét không.
+   * Nếu có, throw lỗi.
+   * */
+  private async assertNoStaffAppointmentOverlap(params: {
+    staffId: string;
+    field: 'doctorId' | 'assistantId';
+    startAt: Date;
+    endAt: Date;
+    exceptAppointmentId?: string;
+    staffLabel: string;
+  }): Promise<void> {
+    const { staffId, field, startAt, endAt, exceptAppointmentId, staffLabel } = params;
+
+    const conflict = await this.prisma.appointment.findFirst({
+      where: {
+        [field]: staffId,
+        status: { in: [...BLOCKING_APPOINTMENT_STATUSES] },
+        ...(exceptAppointmentId ? { id: { not: exceptAppointmentId } } : {}),
+        scheduledAt: { lt: endAt },
+        endedAt: { gt: startAt },
+      },
+      select: {
+        id: true,
+        scheduledAt: true,
+        endedAt: true,
+        patient: { select: { fullName: true } },
+      },
+    });
+
+    if (conflict) {
+      throw new ConflictException(`${staffLabel} đã có lịch hẹn trong khung giờ này`);
+    }
   }
 }
