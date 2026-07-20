@@ -145,7 +145,6 @@ model MedicalVisit {
 
   @@unique([patientId, visitNumber])
   @@index([patientId, visitDate(sort: Desc)])
-  @@index([status])
   @@map("medical_visits")
 }
 
@@ -222,7 +221,6 @@ model PatientFollowUp {
   @@index([assessmentDate, assessmentResult])
   @@index([patientId])
   @@index([originatingVisitId])
-  @@index([createdById])
   @@map("patient_follow_ups")
 }
 
@@ -260,8 +258,6 @@ model Referrer {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   patients       Patient[]
 
-  @@index([fullName])
-  @@index([phone])
   @@map("referrers")
 }
 
@@ -396,7 +392,6 @@ model PatientTreatmentSession {
   images PatientTreatmentSessionImage[]
 
   @@unique([patientServiceRecordId, sessionNumber])
-  @@index([patientServiceRecordId, sessionNumber])
   @@map("patient_treatment_sessions")
 }
 
