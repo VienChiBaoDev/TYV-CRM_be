@@ -35,7 +35,7 @@ export class PatientPaymentService {
   // tìm tất cả thanh toán của một bệnh nhân
   async findAllByPatient(patientId: string): Promise<PatientPaymentsListResponse> {
     // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, payments, aggregate] = await Promise.all([
+    const [, payments, aggregate, refundAggregate] = await Promise.all([
       this.ensurePatientExists(patientId),
       this.prisma.patientPayment.findMany({
         where: { patientId },
@@ -47,14 +47,23 @@ export class PatientPaymentService {
         where: { patientId },
         _sum: { finalAmount: true, paidAmount: true },
       }),
+      // aggregate tổng số tiền hoàn trả của một bệnh nhân
+      this.prisma.patientPayment.aggregate({
+        where: {
+          patientId,
+          totalAmount: { lt: 0 }, // phiếu hoàn trả luôn âm
+        },
+        _sum: { totalAmount: true },
+      }),
     ]);
     // servicesTotal: tổng số tiền dịch vụ
     // paidTotal: tổng số tiền thanh toán
     const servicesTotal = Number(aggregate._sum.finalAmount ?? 0);
     const paidTotal = Number(aggregate._sum.paidAmount ?? 0);
+    const refundTotal = Math.abs(Number(refundAggregate._sum.totalAmount ?? 0));
 
     return {
-      summary: mapPaymentSummary(servicesTotal, paidTotal),
+      summary: mapPaymentSummary(servicesTotal, paidTotal, refundTotal),
       payments: payments.map(mapPatientPaymentToResponse),
     };
   }

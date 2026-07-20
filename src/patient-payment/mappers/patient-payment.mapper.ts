@@ -1,9 +1,5 @@
 import { PaymentMethod, Prisma } from '@prisma/client';
-import {
-  buildInitials,
-  decimalToNumber,
-  formatDisplayDate,
-} from '../../common/mapper-utils';
+import { buildInitials, decimalToNumber, formatDisplayDate } from '../../common/mapper-utils';
 // type PaymentWithRelations là để tạo type cho dữ liệu của bảng patient_payment
 // processedBy là để include dữ liệu từ bảng staff
 // lines là để include dữ liệu từ bảng patient_payment_line
@@ -36,6 +32,7 @@ export interface PatientPaymentSummaryResponse {
   readonly deposit: number;
   readonly products: number;
   readonly services: number;
+  readonly refund: number;
 }
 // hiển thị danh sách thanh toán của một dịch vụ
 export interface PatientPaymentsListResponse {
@@ -83,6 +80,7 @@ export function mapPatientPaymentToResponse(payment: PaymentWithRelations): Pati
 export function mapPaymentSummary(
   servicesTotal: number,
   paidTotal: number,
+  refundTotal: number,
 ): PatientPaymentSummaryResponse {
   return {
     total: servicesTotal,
@@ -91,5 +89,6 @@ export function mapPaymentSummary(
     deposit: 0,
     products: 0,
     services: servicesTotal,
+    refund: refundTotal,
   };
 }
