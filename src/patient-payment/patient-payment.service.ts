@@ -37,12 +37,16 @@ export class PatientPaymentService {
     // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
     const [, payments, aggregate, refundAggregate] = await Promise.all([
       this.ensurePatientExists(patientId),
+      /// findMany để lấy danh sách thanh toán của một bệnh nhân
       this.prisma.patientPayment.findMany({
         where: { patientId },
         include: paymentInclude,
         orderBy: { createdAt: 'desc' },
       }),
-      // aggregate tổng số tiền thanh toán của một bệnh nhân
+      /// aggregate để tính tổng số tiền thanh toán và hoàn trả của một bệnh nhân
+      // Tổng số tiền dịch vụ của một bệnh nhân bao gồm cả dịch vụ đã thanh toán và chưa thanh toán
+      // finalAmount: số tiền dịch vụ
+      // paidAmount: số tiền đã thanh toán
       this.prisma.patientServiceRecord.aggregate({
         where: { patientId },
         _sum: { finalAmount: true, paidAmount: true },
