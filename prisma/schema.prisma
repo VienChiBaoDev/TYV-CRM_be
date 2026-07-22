@@ -425,6 +425,7 @@ model PatientTreatmentSession {
   performedBy          Staff?               @relation("TreatmentSessionPerformedBy", fields: [performedById], references: [id])
 
   images PatientTreatmentSessionImage[]
+  consumables TreatmentSessionConsumable[]
 
   @@unique([patientServiceRecordId, sessionNumber])
   @@map("patient_treatment_sessions")
@@ -539,6 +540,45 @@ model PrescriptionFormulaHerb {
   @@index([templateId, sortOrder])
   @@map("prescription_formula_herbs")
 }
+
+/// Quản lý vật tư tiêu hao
+model Consumable {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  unit             String
+  stockQuantity    Decimal  @default(0) @map("stock_quantity") @db.Decimal(12, 3)
+  note             String?
+  sessionQuotaText String?  @map("session_quota_text")
+  isActive         Boolean  @default(true) @map("is_active")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  usages TreatmentSessionConsumable[]
+  
+  @@unique([name, unit])
+  @@map("consumables")
+}
+
+/// Vật tư tiêu hao mỗi lần điều trị
+model TreatmentSessionConsumable {
+  id                        String   @id @default(uuid()) @db.Uuid
+  patientTreatmentSessionId String   @map("patient_treatment_session_id") @db.Uuid
+  consumableId              String   @map("consumable_id") @db.Uuid
+  nameSnapshot              String   @map("name_snapshot")
+  unitSnapshot              String   @map("unit_snapshot")
+  quantity                  Decimal  @db.Decimal(12, 3)
+  sortOrder                 Int      @default(0) @map("sort_order")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  session    PatientTreatmentSession @relation(fields: [patientTreatmentSessionId], references: [id], onDelete: Cascade)
+  consumable Consumable              @relation(fields: [consumableId], references: [id], onDelete: Restrict)
+  
+  @@index([patientTreatmentSessionId, sortOrder])
+  @@index([consumableId, createdAt])
+  @@map("treatment_session_consumables")
+}
+
 
 enum ClinicalImageCategory {
   DIAGNOSIS

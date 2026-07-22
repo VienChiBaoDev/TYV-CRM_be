@@ -27,6 +27,7 @@ import { PatientPaymentModule } from './patient-payment/patient-payment.module';
 import { PatientTreatmentModule } from './patient-treatment/patient-treatment.module';
 import { StaffShiftModule } from './staff-shift/staff-shift.module';
 import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
+import { ConsumableModule } from './consumable/consumable.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { PrescriptionFormulaTemplateModule } from './prescription-formula-templa
     StaffShiftModule,
     PrescriptionFormulaTemplateModule,
     BankAccountModule,
+    ConsumableModule,
   ],
   controllers: [AppController],
   providers: [
