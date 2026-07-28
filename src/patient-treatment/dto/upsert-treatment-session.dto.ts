@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsISO8601, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { TreatmentSessionConsumableLineDto } from './treatment-session-consumable.dto';
 
 export class UpsertTreatmentSessionDto {
   @Type(() => Number)
@@ -34,4 +45,10 @@ export class UpsertTreatmentSessionDto {
   @IsOptional()
   @IsISO8601()
   nextTreatmentDate?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TreatmentSessionConsumableLineDto)
+  consumables?: TreatmentSessionConsumableLineDto[];
 }

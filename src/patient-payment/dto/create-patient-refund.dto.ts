@@ -48,6 +48,11 @@ export class CreatePatientRefundDto {
   @IsString()
   bankCode?: string;
 
+  /** Tài khoản ngân hàng nhận tiền — chọn từ danh sách khai báo ở màn Cài đặt. */
+  @IsOptional()
+  @IsUUID()
+  bankAccountId?: string;
+
   @IsString()
   branch!: string;
 

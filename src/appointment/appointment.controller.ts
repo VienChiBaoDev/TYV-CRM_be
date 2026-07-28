@@ -29,8 +29,9 @@ export class AppointmentController {
     @Query('status') status?: AppointmentStatus,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('doctorId') doctorId?: string,
   ) {
-    return this.appointmentService.findAll({ branch, status, from, to });
+    return this.appointmentService.findAll({ branch, status, from, to, doctorId });
   }
 
   @Get(':id')

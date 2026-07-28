@@ -4,18 +4,31 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StaffShiftType } from '@prisma/client';
+import { ClinicBranch, Prisma, StaffShiftType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
 import { UpdateStaffShiftDto } from './dto/update-staff-shift.dto';
-import { assertValidTimeRange, rangesOverlap, shouldCheckWorkOverlap } from './staff-shift.rules';
+import {
+  assertValidTimeRange,
+  rangesOverlap,
+  shouldCheckWorkOverlap,
+  isRangeCoveredByWorkShifts,
+} from './staff-shift.rules';
 
 const shiftInclude = {
   staff: {
     select: { id: true, fullName: true, role: true, clinicBranch: true },
   },
 } satisfies Prisma.StaffShiftInclude;
+
+export interface AssertStaffAvailableParams {
+  staffId: string;
+  startAt: Date;
+  endAt: Date;
+  branch: ClinicBranch;
+  staffLabel: string;
+}
 
 @Injectable()
 export class StaffShiftService {
@@ -137,6 +150,52 @@ export class StaffShiftService {
       select: { id: true },
     });
     return Boolean(shift);
+  }
+
+  /**
+   * Kiểm tra xem nhân viên có tồn tại và hoạt động không.
+   * Kiểm tra xem nhân viên có nghỉ trong khung giờ này không.
+   * Kiểm tra xem nhân viên có ca làm phù hợp trong khung giờ này không.
+   * Nếu không, throw lỗi.
+   */
+  async assertStaffAvailableForAppointment(params: AssertStaffAvailableParams): Promise<void> {
+    const { staffId, startAt, endAt, branch, staffLabel } = params;
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { id: true, isActive: true, fullName: true },
+    });
+    if (!staff?.isActive) {
+      throw new BadRequestException(
+        `Không tìm thấy ${staffLabel.toLowerCase()} hoặc đã ngừng hoạt động`,
+      );
+    }
+    const offOverlap = await this.prisma.staffShift.findFirst({
+      where: {
+        staffId,
+        type: StaffShiftType.OFF,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+      select: { id: true },
+    });
+    if (offOverlap) {
+      throw new BadRequestException(`${staffLabel} đang nghỉ trong khung giờ này`);
+    }
+    const workShifts = await this.prisma.staffShift.findMany({
+      where: {
+        staffId,
+        clinicBranch: branch,
+        type: StaffShiftType.WORK,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+      select: { startAt: true, endAt: true },
+      orderBy: { startAt: 'asc' },
+    });
+    const covered = isRangeCoveredByWorkShifts({ startAt, endAt }, workShifts);
+    if (!covered) {
+      throw new BadRequestException(`${staffLabel} không có ca làm phù hợp trong khung giờ này`);
+    }
   }
 
   /**

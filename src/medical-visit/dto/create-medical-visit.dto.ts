@@ -5,8 +5,10 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -40,6 +42,43 @@ export class VisitHerbDto {
   @IsString()
   @MaxLength(100)
   weight!: string;
+
+  @IsOptional()
+  @IsUUID()
+  medicineId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  unit?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  quantity?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  lineTotal?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  decoctionOrder?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  decoctionPrep?: string;
 }
 
 export class VisitClinicalImageDto {
@@ -95,7 +134,6 @@ export class CreateVisitBodyDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(5000)
   symptoms?: string;
 
   @IsOptional()
@@ -115,7 +153,6 @@ export class CreateVisitBodyDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
   labResults?: string;
 
   @IsOptional()

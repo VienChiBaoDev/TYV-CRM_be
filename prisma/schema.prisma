@@ -10,23 +10,23 @@ datasource db {
 
 /// Nhân viên phòng khám — schema sẵn cho auth/role (implement sau)
 model Staff {
-  id               String            @id @default(uuid()) @db.Uuid
-  email            String            @unique
-  passwordHash     String            @map("password_hash")
-  fullName         String            @map("full_name")
-  role             StaffRole
-  clinicBranch     ClinicBranch?     @map("clinic_branch")
-  isActive         Boolean           @default(true) @map("is_active")
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  visitsCreated    MedicalVisit[]    @relation("VisitCreatedBy")
-  visitsUpdated    MedicalVisit[]    @relation("VisitUpdatedBy")
-  followUpsCreated PatientFollowUp[] @relation("FollowUpCreatedBy")
-  followUpsUpdated PatientFollowUp[] @relation("FollowUpUpdatedBy")
+  id                       String                 @id @default(uuid()) @db.Uuid
+  email                    String                 @unique
+  passwordHash             String                 @map("password_hash")
+  fullName                 String                 @map("full_name")
+  role                     StaffRole
+  clinicBranch             ClinicBranch?          @map("clinic_branch")
+  isActive                 Boolean                @default(true) @map("is_active")
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  visitsCreated            MedicalVisit[]         @relation("VisitCreatedBy")
+  visitsUpdated            MedicalVisit[]         @relation("VisitUpdatedBy")
+  followUpsCreated         PatientFollowUp[]      @relation("FollowUpCreatedBy")
+  followUpsUpdated         PatientFollowUp[]      @relation("FollowUpUpdatedBy")
   consultantServiceRecords PatientServiceRecord[] @relation("PatientServiceConsultant")
-  telesaleServiceRecords  PatientServiceRecord[] @relation("PatientServiceTelesale")
-  finalizedServiceRecords PatientServiceRecord[] @relation("PatientServiceFinalizedBy")
-  cancelledServiceRecords PatientServiceRecord[] @relation("PatientServiceCancelledBy")
+  telesaleServiceRecords   PatientServiceRecord[] @relation("PatientServiceTelesale")
+  finalizedServiceRecords  PatientServiceRecord[] @relation("PatientServiceFinalizedBy")
+  cancelledServiceRecords  PatientServiceRecord[] @relation("PatientServiceCancelledBy")
 
   processedPayments PatientPayment[] @relation("PaymentProcessedBy")
 
@@ -35,9 +35,15 @@ model Staff {
   treatmentSessionsAsDoctor      PatientTreatmentSession[] @relation("TreatmentSessionDoctor")
   treatmentSessionsAsPtKtv       PatientTreatmentSession[] @relation("TreatmentSessionPtKtv")
   treatmentSessionsAsPerformedBy PatientTreatmentSession[] @relation("TreatmentSessionPerformedBy")
-  
-  shifts StaffShift[]
-  assignedPatients Patient[] @relation("PatientAssignedStaff")
+
+  shifts              StaffShift[]
+  assignedAsDoctor    Patient[]    @relation("PatientAssignedDoctors")
+  assignedAsAssistant Patient[]    @relation("PatientAssignedAssistants")
+
+  doctorAppointments    Appointment[] @relation("AppointmentDoctor")
+  assistantAppointments Appointment[] @relation("AppointmentAssistant")
+
+  prescriptionFormulaTemplates PrescriptionFormulaTemplate[]
 
   @@index([role])
   @@index([clinicBranch])
@@ -54,7 +60,8 @@ model StaffShift {
   note         String?
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  staff        Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
   @@index([staffId, startAt])
   @@index([clinicBranch, startAt])
   @@map("staff_shifts")
@@ -62,33 +69,34 @@ model StaffShift {
 
 /// Bệnh nhân — hồ sơ bệnh án chính
 model Patient {
-  id               String            @id @default(uuid()) @db.Uuid
-  patientCode      String            @unique @map("patient_code")
-  fullName         String            @map("full_name")
+  id               String                 @id @default(uuid()) @db.Uuid
+  patientCode      String                 @unique @map("patient_code")
+  fullName         String                 @map("full_name")
   gender           Gender
-  birthDate        DateTime?         @map("birth_date") @db.Date
+  birthDate        DateTime?              @map("birth_date") @db.Date
   occupation       String?
   phone            String
   address          String?
-  avatarInitials   String?           @map("avatar_initials")
-  clinicBranch     ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
-  tags             String[]          @default([])
-  dietRestrictions String[]          @default([]) @map("diet_restrictions")
-  nextFollowUpDate DateTime?         @map("next_follow_up_date") @db.Date
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  avatarInitials   String?                @map("avatar_initials")
+  clinicBranch     ClinicBranch           @default(HANG_BONG) @map("clinic_branch")
+  tags             String[]               @default([])
+  dietRestrictions String[]               @default([]) @map("diet_restrictions")
+  nextFollowUpDate DateTime?              @map("next_follow_up_date") @db.Date
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
   source           String?
-  customerStatus   CustomerStatus    @default(LEAD) @map("customer_status")
-  referrerId       String?           @map("referrer_id") @db.Uuid
+  customerStatus   CustomerStatus         @default(LEAD) @map("customer_status")
+  referrerId       String?                @map("referrer_id") @db.Uuid
   appointments     Appointment[]
   visits           MedicalVisit[]
   followUps        PatientFollowUp[]
   referrer         Referrer?              @relation(fields: [referrerId], references: [id])
   serviceRecords   PatientServiceRecord[]
-  
-  payments         PatientPayment[]
-  medicalCase      MedicalCase?
-  assignedStaff    Staff[]                @relation("PatientAssignedStaff")
+
+  payments           PatientPayment[]
+  medicalCase        MedicalCase?
+  assignedDoctors    Staff[]          @relation("PatientAssignedDoctors")
+  assignedAssistants Staff[]          @relation("PatientAssignedAssistants")
 
   @@index([fullName])
   @@index([phone])
@@ -145,18 +153,25 @@ model MedicalVisit {
 
   @@unique([patientId, visitNumber])
   @@index([patientId, visitDate(sort: Desc)])
-  @@index([status])
   @@map("medical_visits")
 }
 
 /// Thành phần thuốc trong đơn của một lượt khám
 model VisitHerb {
-  id        String       @id @default(uuid()) @db.Uuid
-  visitId   String       @map("visit_id") @db.Uuid
-  name      String
-  weight    String
-  sortOrder Int          @default(0) @map("sort_order")
-  visit     MedicalVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid()) @db.Uuid
+  visitId        String       @map("visit_id") @db.Uuid
+  medicineId     String?      @map("medicine_id") @db.Uuid
+  name           String
+  weight         String
+  unit           String?
+  quantity       Decimal?     @db.Decimal(12, 3)
+  unitPrice      Decimal?     @map("unit_price") @db.Decimal(12, 2)
+  lineTotal      Decimal?     @map("line_total") @db.Decimal(12, 2)
+  decoctionOrder String?      @map("decoction_order")
+  decoctionPrep  String?      @map("decoction_prep")
+  sortOrder      Int          @default(0) @map("sort_order")
+  visit          MedicalVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  medicine       Medicine?    @relation(fields: [medicineId], references: [id], onDelete: SetNull)
 
   @@index([visitId, sortOrder])
   @@map("visit_herbs")
@@ -200,44 +215,49 @@ model PatientFollowUp {
   patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   updatedBy          Staff?                    @relation("FollowUpUpdatedBy", fields: [updatedById], references: [id])
 
-
   rescheduledFollowUpDate DateTime? @map("rescheduled_follow_up_date") @db.Date
   rescheduleNote          String?   @map("reschedule_note")
   rescheduledAt           DateTime? @map("rescheduled_at") @db.Timestamptz(6)
   rescheduledById         String?   @map("rescheduled_by_id") @db.Uuid
   scheduledAppointmentId  String?   @unique @map("scheduled_appointment_id") @db.Uuid
 
-  rescheduledBy           Staff?       @relation("FollowUpRescheduledBy", fields: [rescheduledById], references: [id])
-  scheduledAppointment    Appointment? @relation("FollowUpScheduledAppointment", fields: [scheduledAppointmentId], references: [id])
+  rescheduledBy        Staff?       @relation("FollowUpRescheduledBy", fields: [rescheduledById], references: [id])
+  scheduledAppointment Appointment? @relation("FollowUpScheduledAppointment", fields: [scheduledAppointmentId], references: [id])
 
   @@index([followUpDate, scheduleStatus])
   @@index([assessmentDate, assessmentResult])
   @@index([patientId])
   @@index([originatingVisitId])
-  @@index([createdById])
   @@map("patient_follow_ups")
 }
 
 model Appointment {
-  id           String            @id @default(uuid()) @db.Uuid
-  patientId    String            @map("patient_id") @db.Uuid
-  scheduledAt  DateTime          @map("scheduled_at") @db.Timestamptz(6)
-  endedAt      DateTime          @map("ended_at") @db.Timestamptz(6)
-  doctorName     String?           @map("doctor_name")
-  assistantName  String?           @map("assistant_name")
-  clinicBranch ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
-  status       AppointmentStatus @default(BOOKED)
-  note         String?
-  visitId      String?           @map("visit_id") @db.Uuid
-  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id            String            @id @default(uuid()) @db.Uuid
+  patientId     String            @map("patient_id") @db.Uuid
+  scheduledAt   DateTime          @map("scheduled_at") @db.Timestamptz(6)
+  endedAt       DateTime          @map("ended_at") @db.Timestamptz(6)
+  doctorId      String?           @map("doctor_id") @db.Uuid
+  assistantId   String?           @map("assistant_id") @db.Uuid
+  doctorName    String?           @map("doctor_name")
+  assistantName String?           @map("assistant_name")
+  clinicBranch  ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  status        AppointmentStatus @default(BOOKED)
+  note          String?
+  visitId       String?           @map("visit_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor    Staff?  @relation("AppointmentDoctor", fields: [doctorId], references: [id])
+  assistant Staff?  @relation("AppointmentAssistant", fields: [assistantId], references: [id])
 
   followUpScheduled PatientFollowUp? @relation("FollowUpScheduledAppointment")
 
   @@index([patientId])
   @@index([scheduledAt])
   @@index([status])
+  @@index([doctorId, scheduledAt])
+  @@index([assistantId, scheduledAt])
   @@map("appointments")
 }
 
@@ -252,41 +272,60 @@ model Referrer {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   patients       Patient[]
 
-  @@index([fullName])
-  @@index([phone])
   @@map("referrers")
 }
 
+/// Tài khoản ngân hàng của phòng khám — quản lý ở màn Cài đặt,
+/// dùng làm danh sách chọn khi thu tiền / hoàn tiền bằng chuyển khoản.
+model BankAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  bankName      String   @map("bank_name")
+  accountHolder String   @map("account_holder")
+  accountNumber String   @map("account_number")
+  note          String?
+  isActive      Boolean  @default(true) @map("is_active")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  payments PatientPayment[]
+
+  @@unique([bankName, accountNumber])
+  @@map("bank_accounts")
+}
+
 model ServiceGroup {
-  id        String            @id @default(uuid()) @db.Uuid
-  code      String            @unique
+  id        String           @id @default(uuid()) @db.Uuid
+  code      String           @unique
   name      String
-  itemType  ServiceItemType   @map("item_type")
-  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  itemType  ServiceItemType  @map("item_type")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   services  CatalogService[]
+
   @@map("service_groups")
 }
 
 model CatalogService {
-  id             String               @id @default(uuid()) @db.Uuid
-  code           String               @unique
-  name           String
-  groupId        String               @map("group_id") @db.Uuid
-  itemType       ServiceItemType      @map("item_type")
-  price          Decimal              @db.Decimal(12, 2)
-  alternatePrice Decimal              @map("alternate_price") @db.Decimal(12, 2)
-  unit           String
-  status         CatalogServiceStatus @default(ACTIVE)
-  minPriceVat    Decimal?             @map("min_price_vat") @db.Decimal(12, 2)
-  maxPriceVat    Decimal?             @map("max_price_vat") @db.Decimal(12, 2)
-  treatmentCount Int                  @default(1) @map("treatment_count")
-  expiryDays     Int?                 @map("expiry_days")
-  note           String?
-  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  group               ServiceGroup           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  code                  String                 @unique
+  name                  String
+  groupId               String                 @map("group_id") @db.Uuid
+  itemType              ServiceItemType        @map("item_type")
+  price                 Decimal                @db.Decimal(12, 2)
+  alternatePrice        Decimal                @map("alternate_price") @db.Decimal(12, 2)
+  unit                  String
+  status                CatalogServiceStatus   @default(ACTIVE)
+  minPriceVat           Decimal?               @map("min_price_vat") @db.Decimal(12, 2)
+  maxPriceVat           Decimal?               @map("max_price_vat") @db.Decimal(12, 2)
+  treatmentCount        Int                    @default(1) @map("treatment_count")
+  expiryDays            Int?                   @map("expiry_days")
+  note                  String?
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  group                 ServiceGroup           @relation(fields: [groupId], references: [id], onDelete: Restrict)
   patientServiceRecords PatientServiceRecord[]
+
   @@index([groupId])
   @@index([status])
   @@index([itemType])
@@ -295,13 +334,17 @@ model CatalogService {
 
 /// Kho thuốc — dùng khi kê đơn trong lượt khám
 model Medicine {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  unit      String
-  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
-  category  String?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  unit       String
+  unitPrice  Decimal     @map("unit_price") @db.Decimal(12, 2)
+  category   String?
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  visitHerbs VisitHerb[]
+
+  formulaHerbs PrescriptionFormulaHerb[]
+
   @@index([name])
   @@index([unit])
   @@map("medicines")
@@ -309,15 +352,15 @@ model Medicine {
 
 /// Dịch vụ của mỗi bệnh nhân
 model PatientServiceRecord {
-  id                String   @id @default(uuid()) @db.Uuid
-  patientId         String   @map("patient_id") @db.Uuid
-  catalogServiceId  String   @map("catalog_service_id") @db.Uuid
-  serviceCode       String   @map("service_code")
-  serviceName       String   @map("service_name")
+  id               String @id @default(uuid()) @db.Uuid
+  patientId        String @map("patient_id") @db.Uuid
+  catalogServiceId String @map("catalog_service_id") @db.Uuid
+  serviceCode      String @map("service_code")
+  serviceName      String @map("service_name")
 
-  consultantId      String   @map("consultant_id") @db.Uuid
-  telesaleId        String?  @map("telesale_id") @db.Uuid
-  finalizedById     String   @map("finalized_by_id") @db.Uuid
+  consultantId  String  @map("consultant_id") @db.Uuid
+  telesaleId    String? @map("telesale_id") @db.Uuid
+  finalizedById String  @map("finalized_by_id") @db.Uuid
 
   unitPrice         Decimal  @map("unit_price") @db.Decimal(12, 2)
   vatPercent        Decimal  @map("vat_percent") @db.Decimal(5, 2)
@@ -328,14 +371,14 @@ model PatientServiceRecord {
   finalAmount       Decimal  @map("final_amount") @db.Decimal(12, 2)
   listPrice         Decimal? @map("list_price") @db.Decimal(12, 2)
 
-  completedSessions Int      @default(0) @map("completed_sessions")
-  treatmentCount    Int      @default(0) @map("treatment_count")
+  completedSessions Int       @default(0) @map("completed_sessions")
+  treatmentCount    Int       @default(0) @map("treatment_count")
   expiryDate        DateTime? @map("expiry_date") @db.Date
   note              String?
 
-  finalizedAt       DateTime @default(now()) @map("finalized_at") @db.Timestamptz(6)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  finalizedAt DateTime @default(now()) @map("finalized_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   patient        Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
   catalogService CatalogService @relation(fields: [catalogServiceId], references: [id], onDelete: Restrict)
@@ -343,11 +386,11 @@ model PatientServiceRecord {
   telesale       Staff?         @relation("PatientServiceTelesale", fields: [telesaleId], references: [id])
   finalizedBy    Staff          @relation("PatientServiceFinalizedBy", fields: [finalizedById], references: [id])
 
-  paidAmount  Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
-  status      PatientServiceStatus @default(ACTIVE)
-  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
-  cancelledById String? @map("cancelled_by_id") @db.Uuid
-  paymentLines PatientPaymentLine[]
+  paidAmount    Decimal              @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status        PatientServiceStatus @default(ACTIVE)
+  cancelledAt   DateTime?            @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById String?              @map("cancelled_by_id") @db.Uuid
+  paymentLines  PatientPaymentLine[]
 
   cancelledBy Staff? @relation("PatientServiceCancelledBy", fields: [cancelledById], references: [id])
 
@@ -359,34 +402,34 @@ model PatientServiceRecord {
 }
 
 model PatientTreatmentSession {
-  id                     String   @id @default(uuid()) @db.Uuid
-  patientServiceRecordId String   @map("patient_service_record_id") @db.Uuid
-  sessionNumber          Int      @map("session_number")
+  id                     String @id @default(uuid()) @db.Uuid
+  patientServiceRecordId String @map("patient_service_record_id") @db.Uuid
+  sessionNumber          Int    @map("session_number")
 
-  doctorId               String?  @map("doctor_id") @db.Uuid
-  ptKtvId                String?  @map("pt_ktv_id") @db.Uuid
-  professionalSupport    String?  @map("professional_support")
+  doctorId            String? @map("doctor_id") @db.Uuid
+  ptKtvId             String? @map("pt_ktv_id") @db.Uuid
+  professionalSupport String? @map("professional_support")
 
-  treatmentContent       String   @map("treatment_content")
-  note                   String?
-  nextContent            String?  @map("next_content")
-  nextTreatmentDate      DateTime? @map("next_treatment_date") @db.Timestamptz(6)
+  treatmentContent  String    @map("treatment_content")
+  note              String?
+  nextContent       String?   @map("next_content")
+  nextTreatmentDate DateTime? @map("next_treatment_date") @db.Timestamptz(6)
 
-  performedAt            DateTime @map("performed_at") @db.Timestamptz(6)
-  performedById          String?  @map("performed_by_id") @db.Uuid
+  performedAt   DateTime @map("performed_at") @db.Timestamptz(6)
+  performedById String?  @map("performed_by_id") @db.Uuid
 
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   patientServiceRecord PatientServiceRecord @relation(fields: [patientServiceRecordId], references: [id], onDelete: Cascade)
-  doctor               Staff? @relation("TreatmentSessionDoctor", fields: [doctorId], references: [id])
-  ptKtv                Staff? @relation("TreatmentSessionPtKtv", fields: [ptKtvId], references: [id])
-  performedBy          Staff? @relation("TreatmentSessionPerformedBy", fields: [performedById], references: [id])
+  doctor               Staff?               @relation("TreatmentSessionDoctor", fields: [doctorId], references: [id])
+  ptKtv                Staff?               @relation("TreatmentSessionPtKtv", fields: [ptKtvId], references: [id])
+  performedBy          Staff?               @relation("TreatmentSessionPerformedBy", fields: [performedById], references: [id])
 
-  images PatientTreatmentSessionImage[]
+  images      PatientTreatmentSessionImage[]
+  consumables TreatmentSessionConsumable[]
 
   @@unique([patientServiceRecordId, sessionNumber])
-  @@index([patientServiceRecordId, sessionNumber])
   @@map("patient_treatment_sessions")
 }
 
@@ -418,17 +461,26 @@ model PatientPayment {
   paymentDetail String?       @map("payment_detail")
   bankCode      String?       @map("bank_code")
   branch        String
-  content       String?
-  totalAmount   Decimal       @map("total_amount") @db.Decimal(12, 2)
-  processedById String        @map("processed_by_id") @db.Uuid
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// Tài khoản nhận tiền (chuyển khoản). Ba cột *Snapshot là bản sao tại thời điểm
+  /// thu tiền, để phiếu cũ vẫn đúng khi tài khoản bị sửa tên hoặc ngừng dùng.
+  bankAccountId      String?  @map("bank_account_id") @db.Uuid
+  bankNameSnapshot   String?  @map("bank_name_snapshot")
+  bankHolderSnapshot String?  @map("bank_holder_snapshot")
+  bankNumberSnapshot String?  @map("bank_number_snapshot")
+  content            String?
+  totalAmount        Decimal  @map("total_amount") @db.Decimal(12, 2)
+  processedById      String   @map("processed_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   patient     Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
   processedBy Staff                @relation("PaymentProcessedBy", fields: [processedById], references: [id])
+  bankAccount BankAccount?         @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   lines       PatientPaymentLine[]
 
   @@index([patientId, createdAt(sort: Desc)])
+  @@index([bankAccountId])
   @@map("patient_payments")
 }
 
@@ -452,6 +504,81 @@ model PatientPaymentLine {
   @@index([paymentId])
   @@index([patientServiceRecordId])
   @@map("patient_payment_lines")
+}
+
+/// Công thức đơn thuốc cá nhân — mỗi nhân viên tự lưu
+model PrescriptionFormulaTemplate {
+  id        String   @id @default(uuid()) @db.Uuid
+  staffId   String   @map("staff_id") @db.Uuid
+  name      String
+  dosage    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  staff Staff                     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  herbs PrescriptionFormulaHerb[]
+
+  @@unique([staffId, name])
+  @@index([staffId])
+  @@map("prescription_formula_templates")
+}
+
+/// Thành phần thuốc trong công thức mẫu
+model PrescriptionFormulaHerb {
+  id             String   @id @default(uuid()) @db.Uuid
+  templateId     String   @map("template_id") @db.Uuid
+  medicineId     String?  @map("medicine_id") @db.Uuid
+  name           String
+  weight         String
+  unit           String?
+  quantity       Decimal? @db.Decimal(12, 3)
+  decoctionOrder String?  @map("decoction_order")
+  decoctionPrep  String?  @map("decoction_prep")
+  sortOrder      Int      @default(0) @map("sort_order")
+
+  template PrescriptionFormulaTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  medicine Medicine?                   @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+
+  @@index([templateId, sortOrder])
+  @@map("prescription_formula_herbs")
+}
+
+/// Quản lý vật tư tiêu hao
+model Consumable {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  unit             String
+  stockQuantity    Decimal  @default(0) @map("stock_quantity") @db.Decimal(12, 3)
+  note             String?
+  sessionQuotaText String?  @map("session_quota_text")
+  isActive         Boolean  @default(true) @map("is_active")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  usages TreatmentSessionConsumable[]
+
+  @@unique([name, unit])
+  @@map("consumables")
+}
+
+/// Vật tư tiêu hao mỗi lần điều trị
+model TreatmentSessionConsumable {
+  id                        String   @id @default(uuid()) @db.Uuid
+  patientTreatmentSessionId String   @map("patient_treatment_session_id") @db.Uuid
+  consumableId              String   @map("consumable_id") @db.Uuid
+  nameSnapshot              String   @map("name_snapshot")
+  unitSnapshot              String   @map("unit_snapshot")
+  quantity                  Decimal  @db.Decimal(12, 3)
+  sortOrder                 Int      @default(0) @map("sort_order")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session    PatientTreatmentSession @relation(fields: [patientTreatmentSessionId], references: [id], onDelete: Cascade)
+  consumable Consumable              @relation(fields: [consumableId], references: [id], onDelete: Restrict)
+
+  @@index([patientTreatmentSessionId, sortOrder])
+  @@index([consumableId, createdAt])
+  @@map("treatment_session_consumables")
 }
 
 enum ClinicalImageCategory {

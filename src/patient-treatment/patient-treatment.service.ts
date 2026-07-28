@@ -18,6 +18,7 @@ import {
   TreatmentSessionResponse,
 } from './mappers/treatment-session.mapper';
 import { randomUUID } from 'node:crypto';
+import { TreatmentSessionConsumableLineDto } from './dto/treatment-session-consumable.dto';
 
 const MAX_TREATMENT_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -36,6 +37,7 @@ const sessionInclude = {
   ptKtv: { select: { fullName: true } },
   performedBy: { select: { fullName: true } },
   images: { orderBy: { sortOrder: 'asc' } },
+  consumables: { orderBy: { sortOrder: 'asc' } },
 } satisfies Prisma.PatientTreatmentSessionInclude;
 
 @Injectable()
@@ -130,6 +132,9 @@ export class PatientTreatmentService {
     dto: UpsertTreatmentSessionDto,
     performedById: string,
   ): Promise<TreatmentSessionResponse> {
+    /**
+     * Lấy dịch vụ đã thanh toán và hoạt động
+     */
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     this.validateSessionNumber(service, dto.sessionNumber);
 
@@ -146,7 +151,12 @@ export class PatientTreatmentService {
             sessionNumber: dto.sessionNumber,
           },
         },
+        include: { consumables: true },
       });
+
+      if (existing?.consumables.length && dto.consumables?.length) {
+        throw new BadRequestException('Buổi điều trị đã ghi vật tư, không thể thay đổi');
+      }
 
       // Nếu đã tồn tại thì update, nếu không thì create
       const saved = existing
@@ -180,6 +190,16 @@ export class PatientTreatmentService {
             include: sessionInclude,
           });
 
+      /**
+       * Áp dụng vật tư tiêu hao lần đầu tiên
+       */
+      if (!existing?.consumables.length && dto.consumables?.length) {
+        /**
+         * Áp dụng vật tư tiêu hao lần đầu tiên
+         */
+        await this.applyConsumablesOnFirstSave(tx, saved.id, dto.consumables);
+      }
+
       const allSessions = await tx.patientTreatmentSession.findMany({
         where: { patientServiceRecordId: serviceId },
         // Lấy sessionNumber và treatmentContent
@@ -193,6 +213,20 @@ export class PatientTreatmentService {
         where: { id: serviceId },
         data: { completedSessions },
       });
+
+      if (!existing?.consumables.length && dto.consumables?.length) {
+        /**
+         * Lấy lại session sau khi áp dụng vật tư tiêu hao
+         */
+        const reloaded = await tx.patientTreatmentSession.findUniqueOrThrow({
+          where: { id: saved.id },
+          include: sessionInclude,
+        });
+        /**
+         * Map session to response
+         */
+        return mapTreatmentSessionToResponse(reloaded);
+      }
 
       return mapTreatmentSessionToResponse(saved);
     }, PRISMA_TRANSACTION_OPTIONS);
@@ -210,11 +244,7 @@ export class PatientTreatmentService {
   ): Promise<TreatmentSessionImageResponse> {
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     this.validateSessionNumber(service, sessionNumber);
-    const session = await this.ensureSessionForImageUpload(
-      serviceId,
-      sessionNumber,
-      performedById,
-    );
+    const session = await this.ensureSessionForImageUpload(serviceId, sessionNumber, performedById);
     this.assertValidImageFile(file);
     const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
     const storagePath = `patients/${patientId}/treatment/${serviceId}/session-${sessionNumber}/${randomUUID()}.${extension}`;
@@ -400,5 +430,85 @@ export class PatientTreatmentService {
       },
       select: { id: true },
     });
+  }
+
+  /**
+   * Kiểm tra xem các vật tư tiêu hao có trùng ID không
+   */
+  private assertUniqueConsumableIds(lines: TreatmentSessionConsumableLineDto[]): void {
+    const ids = lines.map((line) => line.consumableId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Không được chọn trùng vật tư');
+    }
+  }
+
+  /**
+   * Áp dụng vật tư tiêu hao lần đầu tiên
+   * Tại sao lại là lần đầu tiên?
+   * Vì lần đầu tiên thì chưa có vật tư tiêu hao nên cần áp dụng
+   */
+  private async applyConsumablesOnFirstSave(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    lines: TreatmentSessionConsumableLineDto[],
+  ): Promise<void> {
+    /**
+     * Kiểm tra xem các vật tư tiêu hao có trùng ID không
+     */
+    this.assertUniqueConsumableIds(lines);
+    /**
+     * Nếu không có vật tư tiêu hao thì return
+     */
+    if (lines.length === 0) return;
+    /**
+     * Lặp qua các vật tư tiêu hao và áp dụng
+     */
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      /**
+       * Lấy vật tư tiêu hao
+       */
+      const consumable = await tx.consumable.findUnique({
+        where: { id: line.consumableId },
+      });
+      if (!consumable?.isActive) {
+        throw new BadRequestException('Vật tư không hợp lệ hoặc đã ngừng dùng');
+      }
+      /**
+       * Cập nhật số lượng vật tư tiêu hao
+       */
+      const updated = await tx.consumable.updateMany({
+        where: {
+          id: line.consumableId,
+          // giới hạn số lượng vật tư tiêu hao
+          stockQuantity: { gte: line.quantity },
+        },
+        data: {
+          // giảm số lượng vật tư tiêu hao
+          stockQuantity: { decrement: line.quantity },
+        },
+      });
+      // Nếu không có vật tư tiêu hao thì throw error
+      if (updated.count === 0) {
+        throw new BadRequestException(
+          `"${consumable.name}" không đủ tồn (còn ${Number(consumable.stockQuantity)}, cần ${line.quantity})`,
+        );
+      }
+      /**
+       * Tạo vật tư tiêu hao
+       * Tại sao lại là lần đầu tiên?
+       * Vì lần đầu tiên thì chưa có vật tư tiêu hao nên cần tạo
+       */
+      await tx.treatmentSessionConsumable.create({
+        data: {
+          patientTreatmentSessionId: sessionId,
+          consumableId: line.consumableId,
+          nameSnapshot: consumable.name,
+          unitSnapshot: consumable.unit,
+          quantity: line.quantity,
+          sortOrder: i,
+        },
+      });
+    }
   }
 }

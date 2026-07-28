@@ -26,6 +26,8 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
 import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
 import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
+import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
+import { AppointmentService } from 'src/appointment/appointment.service';
 
 const followUpInclude = {
   patient: {
@@ -38,6 +40,8 @@ export class PatientFollowUpService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly prismaTx: PrismaTransactionService,
+    private readonly staffShiftService: StaffShiftService,
+    private readonly appointmentService: AppointmentService,
   ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
@@ -183,29 +187,66 @@ export class PatientFollowUpService {
     if (followUp.scheduleStatus === 'SCHEDULED') {
       throw new ConflictException('Lịch tái khám đã được đặt lịch');
     }
-    const updated = await this.prismaTx.$transaction(async (tx) => {
-      const scheduledAt = new Date(body.scheduledAt);
-      const endedAt = body.endedAt
-        ? new Date(body.endedAt)
-        : // 30 phút
-          new Date(scheduledAt.getTime() + 30 * 60 * 1000);
 
-      if (endedAt <= scheduledAt) {
-        throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
-      }
-      //Dùng transaction — nếu tạo appointment lỗi thì không cập nhật scheduleStatus
+    const scheduledAt = new Date(body.scheduledAt);
+    const endedAt = body.endedAt
+      ? new Date(body.endedAt)
+      : new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+
+    if (endedAt <= scheduledAt) {
+      throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu');
+    }
+
+    await this.staffShiftService.assertStaffAvailableForAppointment({
+      staffId: body.doctorId,
+      startAt: scheduledAt,
+      endAt: endedAt,
+      branch: followUp.facility,
+      staffLabel: 'Bác sĩ',
+    });
+
+    if (body.assistantId) {
+      await this.staffShiftService.assertStaffAvailableForAppointment({
+        staffId: body.assistantId,
+        startAt: scheduledAt,
+        endAt: endedAt,
+        branch: followUp.facility,
+        staffLabel: 'Trợ lý',
+      });
+    }
+
+    const doctor = await this.prisma.staff.findUnique({
+      where: { id: body.doctorId },
+      select: { fullName: true },
+    });
+    const assistant = body.assistantId
+      ? await this.prisma.staff.findUnique({
+          where: { id: body.assistantId },
+          select: { fullName: true },
+        })
+      : null;
+
+    await this.appointmentService.assertNoSchedulingConflict({
+      doctorId: body.doctorId,
+      assistantId: body.assistantId,
+      startAt: scheduledAt,
+      endAt: endedAt,
+    });
+
+    const updated = await this.prismaTx.$transaction(async (tx) => {
       const appointment = await tx.appointment.create({
         data: {
           patientId: followUp.patientId,
           scheduledAt,
           endedAt,
-          doctorName: body.doctorName ?? followUp.physicianInCharge,
-          assistantName: body.assistantName ?? null,
+          doctorId: body.doctorId,
+          assistantId: body.assistantId ?? null,
+          doctorName: doctor?.fullName ?? body.doctorName ?? followUp.physicianInCharge,
+          assistantName: assistant?.fullName ?? body.assistantName ?? null,
           clinicBranch: followUp.facility,
           note: body.note,
         },
       });
-      // cập nhật lịch tái khám thành đã đặt lịch
       return tx.patientFollowUp.update({
         where: { id: followUpId },
         data: { scheduleStatus: 'SCHEDULED', scheduledAppointmentId: appointment.id },

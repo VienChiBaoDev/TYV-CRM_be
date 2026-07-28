@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
+import { BankAccountModule } from './bank-account/bank-account.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { MedicalCaseModule } from './medical-case/medical-case.module';
@@ -25,6 +26,8 @@ import { PatientServiceModule } from './patient-service/patient-service.module';
 import { PatientPaymentModule } from './patient-payment/patient-payment.module';
 import { PatientTreatmentModule } from './patient-treatment/patient-treatment.module';
 import { StaffShiftModule } from './staff-shift/staff-shift.module';
+import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
+import { ConsumableModule } from './consumable/consumable.module';
 
 @Module({
   imports: [
@@ -60,6 +63,9 @@ import { StaffShiftModule } from './staff-shift/staff-shift.module';
     PatientPaymentModule,
     PatientTreatmentModule,
     StaffShiftModule,
+    PrescriptionFormulaTemplateModule,
+    BankAccountModule,
+    ConsumableModule,
   ],
   controllers: [AppController],
   providers: [

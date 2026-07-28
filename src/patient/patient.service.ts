@@ -8,6 +8,7 @@ import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { UpdatePatientDto } from './dto/update-patient.dto';
 import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/patient.mapper';
 
 interface FindPatientsParams {
@@ -17,7 +18,8 @@ interface FindPatientsParams {
 }
 
 const patientInclude = {
-  assignedStaff: { select: { id: true } },
+  assignedDoctors: { select: { id: true, fullName: true } },
+  assignedAssistants: { select: { id: true, fullName: true } },
   visits: {
     include: {
       herbs: { orderBy: { sortOrder: 'asc' as const } },
@@ -29,15 +31,24 @@ const patientInclude = {
 } satisfies Prisma.PatientInclude;
 
 /** Quyền xem hồ sơ: ADMIN xem tất cả; hồ sơ chưa gán ai thì mọi người xem được;
- *  còn lại chỉ nhân viên được gán mới xem được. */
-function canView(
-  assignedStaff: { id: string }[],
+ *  còn lại chỉ bác sĩ / trợ lý được gán mới xem được. */
+function canAccess(
+  assigned: { assignedDoctors: { id: string }[]; assignedAssistants: { id: string }[] },
   user: JwtPayloadUser,
 ): boolean {
   if (user.role === 'ADMIN') return true;
-  if (assignedStaff.length === 0) return true;
-  return assignedStaff.some((staff) => staff.id === user.id);
+  if (assigned.assignedDoctors.length === 0 && assigned.assignedAssistants.length === 0) {
+    return true;
+  }
+  return (
+    assigned.assignedDoctors.some((staff) => staff.id === user.id) ||
+    assigned.assignedAssistants.some((staff) => staff.id === user.id)
+  );
 }
+
+// Quyền sửa hồ sơ dùng chung quy tắc với quyền xem.
+const canView = canAccess;
+const canEdit = canAccess;
 
 @Injectable()
 export class PatientService {
@@ -60,9 +71,62 @@ export class PatientService {
         customerStatus: CustomerStatus.LEAD,
         referrerId: dto.referrerId,
         avatarInitials: buildInitials(dto.fullName),
-        assignedStaff: dto.assignedStaffIds?.length
-          ? { connect: dto.assignedStaffIds.map((id) => ({ id })) }
+        assignedDoctors: dto.assignedDoctorIds?.length
+          ? { connect: dto.assignedDoctorIds.map((id) => ({ id })) }
           : undefined,
+        assignedAssistants: dto.assignedAssistantIds?.length
+          ? { connect: dto.assignedAssistantIds.map((id) => ({ id })) }
+          : undefined,
+      },
+    });
+  }
+
+  /** Sửa hồ sơ khách hàng, gồm cập nhật lại danh sách bác sĩ / trợ lý phụ trách. */
+  async update(id: string, dto: UpdatePatientDto, user: JwtPayloadUser) {
+    const patient = await this.prisma.patient.findUnique({
+      where: { id },
+      include: {
+        assignedDoctors: { select: { id: true } },
+        assignedAssistants: { select: { id: true } },
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('Không tìm thấy khách hàng');
+    }
+    if (!canEdit(patient, user)) {
+      throw new ForbiddenException('Bạn không có quyền sửa hồ sơ này');
+    }
+
+    return this.prisma.patient.update({
+      where: { id },
+      data: {
+        ...(dto.fullName !== undefined && {
+          fullName: dto.fullName,
+          avatarInitials: buildInitials(dto.fullName),
+        }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.birthDate !== undefined && {
+          birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+        }),
+        ...(dto.occupation !== undefined && { occupation: dto.occupation }),
+        ...(dto.address !== undefined && { address: dto.address }),
+        ...(dto.source !== undefined && { source: dto.source }),
+        ...(dto.clinicBranch !== undefined && { clinicBranch: dto.clinicBranch }),
+        ...(dto.referrerId !== undefined && { referrerId: dto.referrerId }),
+        // set thay thế toàn bộ danh sách phụ trách khi payload có gửi field tương ứng
+        ...(dto.assignedDoctorIds !== undefined && {
+          assignedDoctors: { set: dto.assignedDoctorIds.map((sid) => ({ id: sid })) },
+        }),
+        ...(dto.assignedAssistantIds !== undefined && {
+          assignedAssistants: { set: dto.assignedAssistantIds.map((sid) => ({ id: sid })) },
+        }),
+      },
+      include: {
+        referrer: { select: { id: true, fullName: true } },
+        assignedDoctors: { select: { id: true, fullName: true } },
+        assignedAssistants: { select: { id: true, fullName: true } },
       },
     });
   }
@@ -86,8 +150,15 @@ export class PatientService {
     if (user.role !== 'ADMIN') {
       conditions.push({
         OR: [
-          { assignedStaff: { none: {} } },
-          { assignedStaff: { some: { id: user.id } } },
+          // Hồ sơ chưa gán bác sĩ lẫn trợ lý → mọi người xem được
+          {
+            AND: [
+              { assignedDoctors: { none: {} } },
+              { assignedAssistants: { none: {} } },
+            ],
+          },
+          { assignedDoctors: { some: { id: user.id } } },
+          { assignedAssistants: { some: { id: user.id } } },
         ],
       });
     }
@@ -104,7 +175,8 @@ export class PatientService {
       where: { id },
       include: {
         referrer: { select: { id: true, fullName: true } },
-        assignedStaff: { select: { id: true } },
+        assignedDoctors: { select: { id: true, fullName: true } },
+        assignedAssistants: { select: { id: true, fullName: true } },
       },
     });
 
@@ -112,7 +184,7 @@ export class PatientService {
       throw new NotFoundException('Không tìm thấy khách hàng');
     }
 
-    if (!canView(patient.assignedStaff, user)) {
+    if (!canView(patient, user)) {
       throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
     }
 
@@ -132,7 +204,7 @@ export class PatientService {
       throw new NotFoundException('Patient not found');
     }
 
-    if (!canView(patient.assignedStaff, user)) {
+    if (!canView(patient, user)) {
       throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
     }
 

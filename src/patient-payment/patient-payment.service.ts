@@ -24,6 +24,12 @@ const paymentInclude = {
   lines: true,
 } satisfies Prisma.PatientPaymentInclude;
 
+/** Ba cột snapshot ghi kèm phiếu thu để lịch sử không đổi khi tài khoản bị sửa. */
+type BankAccountSnapshot = Pick<
+  Prisma.PatientPaymentUncheckedCreateInput,
+  'bankAccountId' | 'bankNameSnapshot' | 'bankHolderSnapshot' | 'bankNumberSnapshot'
+>;
+
 // dịch vụ thanh toán
 @Injectable()
 export class PatientPaymentService {
@@ -35,26 +41,39 @@ export class PatientPaymentService {
   // tìm tất cả thanh toán của một bệnh nhân
   async findAllByPatient(patientId: string): Promise<PatientPaymentsListResponse> {
     // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, payments, aggregate] = await Promise.all([
+    const [, payments, aggregate, refundAggregate] = await Promise.all([
       this.ensurePatientExists(patientId),
+      /// findMany để lấy danh sách thanh toán của một bệnh nhân
       this.prisma.patientPayment.findMany({
         where: { patientId },
         include: paymentInclude,
         orderBy: { createdAt: 'desc' },
       }),
-      // aggregate tổng số tiền thanh toán của một bệnh nhân
+      /// aggregate để tính tổng số tiền thanh toán và hoàn trả của một bệnh nhân
+      // Tổng số tiền dịch vụ của một bệnh nhân bao gồm cả dịch vụ đã thanh toán và chưa thanh toán
+      // finalAmount: số tiền dịch vụ
+      // paidAmount: số tiền đã thanh toán
       this.prisma.patientServiceRecord.aggregate({
         where: { patientId },
         _sum: { finalAmount: true, paidAmount: true },
+      }),
+      // aggregate tổng số tiền hoàn trả của một bệnh nhân
+      this.prisma.patientPayment.aggregate({
+        where: {
+          patientId,
+          totalAmount: { lt: 0 }, // phiếu hoàn trả luôn âm
+        },
+        _sum: { totalAmount: true },
       }),
     ]);
     // servicesTotal: tổng số tiền dịch vụ
     // paidTotal: tổng số tiền thanh toán
     const servicesTotal = Number(aggregate._sum.finalAmount ?? 0);
     const paidTotal = Number(aggregate._sum.paidAmount ?? 0);
+    const refundTotal = Math.abs(Number(refundAggregate._sum.totalAmount ?? 0));
 
     return {
-      summary: mapPaymentSummary(servicesTotal, paidTotal),
+      summary: mapPaymentSummary(servicesTotal, paidTotal, refundTotal),
       payments: payments.map(mapPatientPaymentToResponse),
     };
   }
@@ -103,6 +122,12 @@ export class PatientPaymentService {
           : PaymentMethod.BANK_TRANSFER;
 
       // tạo thanh toán mới
+      const bankSnapshot = await this.resolveBankAccountSnapshot(
+        tx,
+        paymentMethod,
+        dto.bankAccountId,
+      );
+
       const payment = await tx.patientPayment.create({
         data: {
           patientId,
@@ -110,6 +135,7 @@ export class PatientPaymentService {
           paymentMethod,
           paymentDetail: dto.paymentDetail?.trim() || null,
           bankCode: dto.bankCode?.trim() || null,
+          ...bankSnapshot,
           branch: dto.branch.trim(),
           content: dto.content?.trim() || null,
           totalAmount,
@@ -183,6 +209,12 @@ export class PatientPaymentService {
       const reasonLabel = REFUND_REASON[dto.reason as keyof typeof REFUND_REASON] ?? dto.reason;
       const content = [reasonLabel, dto.content?.trim()].filter(Boolean).join(' — ');
 
+      const bankSnapshot = await this.resolveBankAccountSnapshot(
+        tx,
+        paymentMethod,
+        dto.bankAccountId,
+      );
+
       const payment = await tx.patientPayment.create({
         data: {
           patientId,
@@ -190,6 +222,7 @@ export class PatientPaymentService {
           paymentMethod,
           paymentDetail: dto.paymentDetail?.trim() || null,
           bankCode: dto.bankCode?.trim() || null,
+          ...bankSnapshot,
           branch: dto.branch.trim(),
           content: content || null,
           totalAmount: -totalAmount, // âm
@@ -249,6 +282,51 @@ export class PatientPaymentService {
       where: { voucherCode: { startsWith: prefix } },
     });
     return `${prefix}.${count + 1}`;
+  }
+
+  /**
+   * Tra tài khoản ngân hàng nhận tiền và chụp lại thông tin tại thời điểm thu.
+   * Thu bằng tiền mặt thì bỏ qua; chuyển khoản mà không chọn tài khoản vẫn cho lưu
+   * để không chặn các phiếu nhập tay theo lối cũ.
+   */
+  private async resolveBankAccountSnapshot(
+    tx: Prisma.TransactionClient,
+    paymentMethod: PaymentMethod,
+    bankAccountId?: string,
+  ): Promise<BankAccountSnapshot> {
+    if (paymentMethod !== PaymentMethod.BANK_TRANSFER || !bankAccountId) {
+      return {
+        bankAccountId: null,
+        bankNameSnapshot: null,
+        bankHolderSnapshot: null,
+        bankNumberSnapshot: null,
+      };
+    }
+
+    const account = await tx.bankAccount.findUnique({
+      where: { id: bankAccountId },
+      select: {
+        id: true,
+        bankName: true,
+        accountHolder: true,
+        accountNumber: true,
+        isActive: true,
+      },
+    });
+
+    if (!account) {
+      throw new BadRequestException('Không tìm thấy tài khoản ngân hàng');
+    }
+    if (!account.isActive) {
+      throw new BadRequestException('Tài khoản ngân hàng này đã ngừng sử dụng');
+    }
+
+    return {
+      bankAccountId: account.id,
+      bankNameSnapshot: account.bankName,
+      bankHolderSnapshot: account.accountHolder,
+      bankNumberSnapshot: account.accountNumber,
+    };
   }
 
   private async ensurePatientExists(patientId: string): Promise<void> {

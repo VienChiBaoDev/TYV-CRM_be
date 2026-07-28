@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
-import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
+import { CreateMedicalVisitDto, VisitHerbDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { FollowUpPlanDto } from './dto/create-medical-visit.dto';
 import {
@@ -131,12 +131,7 @@ export class MedicalVisitService {
           if (dto.visit.herbs.length > 0) {
             // Tạo các loại thuốc mới
             await tx.visitHerb.createMany({
-              data: dto.visit.herbs.map((herb, index) => ({
-                visitId,
-                name: herb.name,
-                weight: herb.weight,
-                sortOrder: index,
-              })),
+              data: this.buildHerbCreateRows(visitId, dto.visit.herbs),
             });
           }
         }
@@ -327,11 +322,9 @@ export class MedicalVisitService {
       status: visit.status,
       herbs: visit.herbs?.length
         ? {
-            create: visit.herbs.map((herb, index) => ({
-              name: herb.name,
-              weight: herb.weight,
-              sortOrder: index,
-            })),
+            create: visit.herbs.map((herb, index) =>
+              this.buildHerbNestedCreate(herb, index),
+            ),
           }
         : undefined,
       clinicalImages: visit.clinicalImages?.length
@@ -467,5 +460,44 @@ export class MedicalVisitService {
     });
 
     return (aggregate._max?.sortOrder ?? -1) + 1;
+  }
+
+  private buildHerbNestedCreate(
+    herb: VisitHerbDto,
+    sortOrder: number,
+  ): Prisma.VisitHerbCreateWithoutVisitInput {
+    return {
+      name: herb.name,
+      weight: herb.weight,
+      sortOrder,
+      unit: herb.unit,
+      quantity: herb.quantity,
+      unitPrice: herb.unitPrice,
+      lineTotal: herb.lineTotal,
+      decoctionOrder: herb.decoctionOrder,
+      decoctionPrep: herb.decoctionPrep,
+      ...(herb.medicineId
+        ? { medicine: { connect: { id: herb.medicineId } } }
+        : {}),
+    };
+  }
+
+  private buildHerbCreateRows(
+    visitId: string,
+    herbs: VisitHerbDto[],
+  ): Prisma.VisitHerbCreateManyInput[] {
+    return herbs.map((herb, index) => ({
+      visitId,
+      medicineId: herb.medicineId ?? null,
+      name: herb.name,
+      weight: herb.weight,
+      unit: herb.unit ?? null,
+      quantity: herb.quantity ?? null,
+      unitPrice: herb.unitPrice ?? null,
+      lineTotal: herb.lineTotal ?? null,
+      decoctionOrder: herb.decoctionOrder ?? null,
+      decoctionPrep: herb.decoctionPrep ?? null,
+      sortOrder: index,
+    }));
   }
 }
