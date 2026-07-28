@@ -54,5 +54,10 @@ export class CreatePatientDto {
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
-  assignedStaffIds?: string[];
+  assignedDoctorIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  assignedAssistantIds?: string[];
 }

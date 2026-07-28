@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ClinicBranch } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { UpdatePatientDto } from './dto/update-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
 import { PatientService } from './patient.service';
 
@@ -31,6 +41,15 @@ export class PatientController {
     @CurrentUser() user: JwtPayloadUser,
   ) {
     return this.patientService.findOne(id, user);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePatientDto,
+    @CurrentUser() user: JwtPayloadUser,
+  ) {
+    return this.patientService.update(id, dto, user);
   }
 
   // Chi tiết mỗi lần khám của khách hàng

@@ -32,7 +32,14 @@ export interface PatientDetailResponse {
   readonly customerStatus: CustomerStatus;
   readonly visitsCount: number;
   readonly treatmentDays: number;
+  readonly assignedDoctors: AssignedStaffResponse[];
+  readonly assignedAssistants: AssignedStaffResponse[];
   readonly visits: MedicalVisitResponse[];
+}
+
+export interface AssignedStaffResponse {
+  readonly id: string;
+  readonly fullName: string;
 }
 
 type VisitWithRelations = MedicalVisit & {
@@ -43,6 +50,8 @@ type VisitWithRelations = MedicalVisit & {
 
 type PatientWithVisits = Patient & {
   visits: VisitWithRelations[];
+  assignedDoctors: AssignedStaffResponse[];
+  assignedAssistants: AssignedStaffResponse[];
 };
 
 function computeAge(birthDate: Date | null): number | null {
@@ -101,6 +110,14 @@ export function mapPatientToDetailResponse(
     customerStatus: patient.customerStatus,
     visitsCount: patient.visits.length,
     treatmentDays: computeTreatmentDays(patient.visits),
+    assignedDoctors: patient.assignedDoctors.map((s) => ({
+      id: s.id,
+      fullName: s.fullName,
+    })),
+    assignedAssistants: patient.assignedAssistants.map((s) => ({
+      id: s.id,
+      fullName: s.fullName,
+    })),
     visits: visitsAsc.map(mapVisitToResponse),
   };
 }
