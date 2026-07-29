@@ -25,6 +25,19 @@ export interface ConsumableOptionResponse {
   readonly sessionQuotaText: string | null;
 }
 
+export interface ConsumableUsageResponse {
+  readonly id: string;
+  readonly consumableName: string;
+  readonly unit: string;
+  readonly quantity: number;
+  readonly performedAt: string;
+  readonly patientName: string;
+  readonly patientCode: string;
+  readonly serviceName: string;
+  readonly sessionNumber: number;
+  readonly performedByName: string | null;
+}
+
 export function mapConsumableToResponse(row: Consumable): ConsumableResponse {
   return {
     id: row.id,

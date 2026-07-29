@@ -1,9 +1,11 @@
-import { IsISO8601, IsOptional, IsUUID } from 'class-validator';
+import { IsISO8601, IsOptional, IsString, IsUUID } from 'class-validator';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 
-/**
- * DTO để query lịch sử sử dụng vật tư tiêu hao
- */
-export class QueryConsumableUsageDto {
+export class QueryConsumableUsageDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @IsOptional()
   @IsISO8601()
   from?: string;
