@@ -28,6 +28,8 @@ import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
 import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 import { AppointmentService } from 'src/appointment/appointment.service';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 
 const followUpInclude = {
   patient: {
@@ -48,12 +50,16 @@ export class PatientFollowUpService {
   ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
-  async findUpcoming(params: {
-    clinicId?: string;
-    daysAhead?: number;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
+  async findUpcoming(
+    params: {
+      clinicId?: string;
+      daysAhead?: number;
+      page?: number;
+      limit?: number;
+    },
+    user: JwtPayloadUser,
+  ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     // N ngày tới
     const daysAhead = params.daysAhead ?? DEFAULT_DAYS_AHEAD;
     const page = params.page ?? DEFAULT_PAGE;
@@ -119,11 +125,15 @@ export class PatientFollowUpService {
     };
   }
   /** Bảng 2: Hỏi thăm — đến hạn assessmentDate, cùng quy tắc ẩn/hiện với findUpcoming */
-  async findPendingAssessments(params: {
-    clinicId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
+  async findPendingAssessments(
+    params: {
+      clinicId?: string;
+      page?: number;
+      limit?: number;
+    },
+    user: JwtPayloadUser,
+  ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     const page = params.page ?? DEFAULT_PAGE;
     const limit = params.limit ?? DEFAULT_LIMIT;
     const today = startOfTodayUtc();

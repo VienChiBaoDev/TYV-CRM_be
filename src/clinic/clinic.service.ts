@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, StaffRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClinicDto } from './dto/create-clinic.dto';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
@@ -32,6 +32,30 @@ export class ClinicService {
         code: true,
         name: true,
       },
+    });
+  }
+
+  /** Cơ sở user được phép chọn — ADMIN thấy tất cả active. */
+  async findActiveOptionsForUser(staffId: string) {
+    const staff = await this.prisma.staff.findUniqueOrThrow({
+      where: { id: staffId },
+      select: { role: true },
+    });
+
+    const select = { id: true, code: true, name: true } as const;
+    const where = { isActive: true };
+
+    if (staff.role === StaffRole.ADMIN) {
+      return this.prisma.clinic.findMany({ where, orderBy: ORDER_BY, select });
+    }
+
+    return this.prisma.clinic.findMany({
+      where: {
+        ...where,
+        staffLinks: { some: { staffId } },
+      },
+      orderBy: ORDER_BY,
+      select,
     });
   }
 
@@ -84,7 +108,7 @@ export class ClinicService {
 
     const [staffCount, shiftCount, patientCount, appointmentCount, followUpCount] =
       await Promise.all([
-        this.prisma.staff.count({ where: { clinicId: id } }),
+        this.prisma.staffClinic.count({ where: { clinicId: id } }),
         this.prisma.staffShift.count({ where: { clinicId: id } }),
         this.prisma.patient.count({ where: { clinicId: id } }),
         this.prisma.appointment.count({ where: { clinicId: id } }),

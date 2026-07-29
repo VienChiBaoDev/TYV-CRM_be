@@ -15,9 +15,8 @@ model Staff {
   passwordHash             String                 @map("password_hash")
   fullName                 String                 @map("full_name")
   role                     StaffRole
-  clinicId                 String?                @map("clinic_id") @db.Uuid
-  clinic                   Clinic?                @relation(fields: [clinicId], references: [id])
   isActive                 Boolean                @default(true) @map("is_active")
+  clinicLinks              StaffClinic[]
   createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
   visitsCreated            MedicalVisit[]         @relation("VisitCreatedBy")
@@ -47,8 +46,21 @@ model Staff {
   prescriptionFormulaTemplates PrescriptionFormulaTemplate[]
 
   @@index([role])
-  @@index([clinicId])
   @@map("staff")
+}
+
+/// Gán nhân viên vào một hoặc nhiều cơ sở. ADMIN không có row — truy cập mọi cơ sở.
+model StaffClinic {
+  staffId   String   @map("staff_id") @db.Uuid
+  clinicId  String   @map("clinic_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, clinicId])
+  @@index([clinicId])
+  @@map("staff_clinics")
 }
 
 model StaffShift {
@@ -293,7 +305,7 @@ model Clinic {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  staff        Staff[]
+  staffLinks   StaffClinic[]
   staffShifts  StaffShift[]
   patients     Patient[]
   appointments Appointment[]

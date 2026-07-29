@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -7,7 +8,6 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
-  ValidateIf,
 } from 'class-validator';
 import { StaffRole } from '@prisma/client';
 
@@ -27,9 +27,9 @@ export class CreateStaffDto {
   role!: StaffRole;
 
   @IsOptional()
-  @ValidateIf((_o, value) => value != null)
-  @IsUUID()
-  clinicId?: string | null;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  clinicIds?: string[];
 
   @IsOptional()
   @IsBoolean()

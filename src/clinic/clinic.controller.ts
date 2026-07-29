@@ -9,8 +9,10 @@ import {
   Post,
 } from '@nestjs/common';
 import { StaffRole } from '@prisma/client';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
-import { ClinicService } from './clinic.service';
+import { ClinicService } from '../clinic/clinic.service';
 import { CreateClinicDto } from './dto/create-clinic.dto';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
 
@@ -23,8 +25,8 @@ export class ClinicController {
   /** Mọi nhân viên đọc danh sách đang bật để chọn trên UI. */
   @Get('options')
   @Roles(StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.ASSISTANT, StaffRole.STAFF)
-  findOptions() {
-    return this.clinicService.findActiveOptions();
+  findOptions(@CurrentUser() user: JwtPayloadUser) {
+    return this.clinicService.findActiveOptionsForUser(user.id);
   }
 
   @Get()

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { CustomerStatus, Prisma } from '@prisma/client';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
@@ -60,10 +61,11 @@ const canEdit = canAccess;
 export class PatientService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreatePatientDto) {
+  async create(dto: CreatePatientDto, user: JwtPayloadUser) {
     if (!dto.clinicId) {
       throw new BadRequestException('Vui lòng chọn cơ sở');
     }
+    await assertClinicAccess(this.prisma, user, dto.clinicId);
 
     const patientCode = await this.generatePatientCode();
 
@@ -107,6 +109,10 @@ export class PatientService {
     if (!canEdit(patient, user)) {
       throw new ForbiddenException('Bạn không có quyền sửa hồ sơ này');
     }
+    if (dto.clinicId !== undefined) {
+      await assertClinicAccess(this.prisma, user, dto.clinicId);
+    }
+    await assertClinicAccess(this.prisma, user, patient.clinicId);
 
     return this.prisma.patient.update({
       where: { id },
@@ -141,7 +147,8 @@ export class PatientService {
     });
   }
 
-  findAll(params: FindPatientsParams, user: JwtPayloadUser) {
+  async findAll(params: FindPatientsParams, user: JwtPayloadUser) {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     const conditions: Prisma.PatientWhereInput[] = [];
 
     if (params.clinicId) conditions.push({ clinicId: params.clinicId });
@@ -197,6 +204,7 @@ export class PatientService {
     if (!canView(patient, user)) {
       throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
     }
+    await assertClinicAccess(this.prisma, user, patient.clinicId);
 
     return patient;
   }
@@ -217,6 +225,7 @@ export class PatientService {
     if (!canView(patient, user)) {
       throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
     }
+    await assertClinicAccess(this.prisma, user, patient.clinicId);
 
     return mapPatientToDetailResponse(patient);
   }

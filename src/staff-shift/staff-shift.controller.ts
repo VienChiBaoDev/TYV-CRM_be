@@ -10,6 +10,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { StaffRole } from '@prisma/client';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
@@ -22,27 +24,31 @@ export class StaffShiftController {
   constructor(private readonly staffShiftService: StaffShiftService) {}
 
   @Get()
-  findAll(@Query() query: QueryStaffShiftDto) {
-    return this.staffShiftService.findAll(query);
+  findAll(@Query() query: QueryStaffShiftDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.staffShiftService.findAll(query, user);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.staffShiftService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayloadUser) {
+    return this.staffShiftService.findOne(id, user);
   }
 
   @Post()
-  create(@Body() dto: CreateStaffShiftDto) {
-    return this.staffShiftService.create(dto);
+  create(@Body() dto: CreateStaffShiftDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.staffShiftService.create(dto, user);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStaffShiftDto) {
-    return this.staffShiftService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStaffShiftDto,
+    @CurrentUser() user: JwtPayloadUser,
+  ) {
+    return this.staffShiftService.update(id, dto, user);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.staffShiftService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayloadUser) {
+    return this.staffShiftService.remove(id, user);
   }
 }

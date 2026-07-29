@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { Prisma, StaffShiftType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
 import { UpdateStaffShiftDto } from './dto/update-staff-shift.dto';
@@ -18,7 +20,12 @@ import {
 
 const shiftInclude = {
   staff: {
-    select: { id: true, fullName: true, role: true, clinicId: true },
+    select: {
+      id: true,
+      fullName: true,
+      role: true,
+      clinicLinks: { select: { clinicId: true } },
+    },
   },
 } satisfies Prisma.StaffShiftInclude;
 
@@ -36,7 +43,8 @@ export class StaffShiftService {
   /**
    * Lấy tất cả các ca làm của một nhân viên.
    */
-  findAll(params: QueryStaffShiftDto) {
+  async findAll(params: QueryStaffShiftDto, user: JwtPayloadUser) {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     const where: Prisma.StaffShiftWhereInput = {
       staffId: params.staffId,
       ...(params.clinicId ? { clinicId: params.clinicId } : {}),
@@ -53,7 +61,7 @@ export class StaffShiftService {
   /**
    * Lấy một ca làm theo id.
    */
-  async findOne(id: string) {
+  async findOne(id: string, user?: JwtPayloadUser) {
     const shift = await this.prisma.staffShift.findUnique({
       where: { id },
       include: shiftInclude,
@@ -61,13 +69,14 @@ export class StaffShiftService {
     if (!shift) {
       throw new NotFoundException('Không tìm thấy ca làm');
     }
+    if (user) {
+      await assertClinicAccess(this.prisma, user, shift.clinicId);
+    }
     return shift;
   }
 
-  /**
-   * Tạo mới một ca làm.
-   */
-  async create(dto: CreateStaffShiftDto) {
+  async create(dto: CreateStaffShiftDto, user: JwtPayloadUser) {
+    await assertClinicAccess(this.prisma, user, dto.clinicId);
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
     /** Kiểm tra xem thời gian bắt đầu có lớn hơn thời gian kết thúc không. */
@@ -103,8 +112,11 @@ export class StaffShiftService {
   /**
    * Cập nhật một ca làm.
    */
-  async update(id: string, dto: UpdateStaffShiftDto) {
-    const current = await this.findOne(id);
+  async update(id: string, dto: UpdateStaffShiftDto, user: JwtPayloadUser) {
+    const current = await this.findOne(id, user);
+    if (dto.clinicId) {
+      await assertClinicAccess(this.prisma, user, dto.clinicId);
+    }
 
     const startAt = dto.startAt ? new Date(dto.startAt) : current.startAt;
     const endAt = dto.endAt ? new Date(dto.endAt) : current.endAt;
@@ -132,8 +144,8 @@ export class StaffShiftService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: JwtPayloadUser) {
+    await this.findOne(id, user);
     await this.prisma.staffShift.delete({ where: { id } });
     return { success: true };
   }

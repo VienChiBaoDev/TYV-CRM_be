@@ -12,6 +12,8 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -58,8 +60,9 @@ export class AppointmentService {
     private readonly staffShiftService: StaffShiftService,
   ) {}
 
-  async create(dto: CreateAppointmentDto) {
+  async create(dto: CreateAppointmentDto, user: JwtPayloadUser) {
     this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
+    await assertClinicAccess(this.prisma, user, dto.clinicId);
     const startAt = new Date(dto.scheduledAt);
     const endAt = new Date(dto.endedAt);
     const clinicId = dto.clinicId;
@@ -96,7 +99,8 @@ export class AppointmentService {
     });
   }
 
-  async findAll(params: FindAppointmentsParams) {
+  async findAll(params: FindAppointmentsParams, user: JwtPayloadUser) {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     if (params.doctorId) {
       const doctor = await this.prisma.staff.findUnique({
         where: { id: params.doctorId },
@@ -131,7 +135,7 @@ export class AppointmentService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user?: JwtPayloadUser) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -143,11 +147,14 @@ export class AppointmentService {
     if (!appointment) {
       throw new NotFoundException('Không tìm thấy lịch hẹn');
     }
+    if (user) {
+      await assertClinicAccess(this.prisma, user, appointment.clinicId);
+    }
     return appointment;
   }
 
-  async update(id: string, dto: UpdateAppointmentDto) {
-    const current = await this.findOne(id);
+  async update(id: string, dto: UpdateAppointmentDto, user: JwtPayloadUser) {
+    const current = await this.findOne(id, user);
     if (dto.scheduledAt && dto.endedAt) {
       this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     } else if (dto.scheduledAt || dto.endedAt) {
@@ -160,6 +167,9 @@ export class AppointmentService {
     }
     if (dto.visitId !== undefined) {
       throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
+    }
+    if (dto.clinicId) {
+      await assertClinicAccess(this.prisma, user, dto.clinicId);
     }
     // nếu không phải là hủy lịch hẹn, kiểm tra xem có cần kiểm tra ca làm của nhân viên không và kiểm tra xem có lịch hẹn nào trùng khung giờ với lịch hẹn đang xét không.
     const isCancelling = dto.status === AppointmentStatus.CANCELLED;
@@ -266,8 +276,8 @@ export class AppointmentService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: JwtPayloadUser) {
+    await this.findOne(id, user);
     return this.prisma.appointment.delete({ where: { id } });
   }
 
@@ -455,7 +465,7 @@ export class AppointmentService {
     return (aggregate._max.visitNumber ?? 0) + 1;
   }
 
-  async checkIn(id: string) {
+  async checkIn(id: string, user: JwtPayloadUser) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -468,6 +478,7 @@ export class AppointmentService {
     if (!appointment) {
       throw new NotFoundException('Không tìm thấy lịch hẹn');
     }
+    await assertClinicAccess(this.prisma, user, appointment.clinicId);
     if (appointment.visitId) {
       throw new ConflictException('Lịch hẹn đã được tiếp nhận');
     }

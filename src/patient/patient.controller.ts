@@ -20,8 +20,8 @@ export class PatientController {
   constructor(private readonly patientService: PatientService) {}
 
   @Post()
-  create(@Body() dto: CreatePatientDto) {
-    return this.patientService.create(dto);
+  create(@Body() dto: CreatePatientDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.patientService.create(dto, user);
   }
 
   @Get()

@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Staff } from '@prisma/client';
+import { Staff, StaffRole } from '@prisma/client';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -10,7 +10,8 @@ export interface AuthUser {
   email: string;
   fullName: string;
   role: Staff['role'];
-  clinicId: string | null;
+  clinicIds: string[];
+  allClinics: boolean;
 }
 
 @Injectable()
@@ -34,13 +35,12 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
-    const user = this.toAuthUser(staff);
+    const user = await this.toAuthUser(staff);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
       role: user.role,
       fullName: user.fullName,
-      clinicId: user.clinicId,
     });
 
     return { accessToken, user };
@@ -54,13 +54,24 @@ export class AuthService {
     return this.toAuthUser(staff);
   }
 
-  private toAuthUser(staff: Staff): AuthUser {
+  private async toAuthUser(staff: Staff): Promise<AuthUser> {
+    const allClinics = staff.role === StaffRole.ADMIN;
+    const clinicIds = allClinics
+      ? []
+      : (
+          await this.prisma.staffClinic.findMany({
+            where: { staffId: staff.id },
+            select: { clinicId: true },
+          })
+        ).map((row) => row.clinicId);
+
     return {
       id: staff.id,
       email: staff.email,
       fullName: staff.fullName,
       role: staff.role,
-      clinicId: staff.clinicId,
+      clinicIds,
+      allClinics,
     };
   }
 }

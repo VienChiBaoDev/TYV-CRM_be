@@ -20,24 +20,32 @@ export class PatientFollowUpController {
   @Get('upcoming')
   findUpcoming(
     @Query() query: QueryUpcomingFollowUpsDto,
+    @CurrentUser() user: JwtPayloadUser,
   ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
-    return this.patientFollowUpService.findUpcoming({
-      clinicId: query.clinicId,
-      daysAhead: query.daysAhead,
-      page: query.page,
-      limit: query.limit,
-    });
+    return this.patientFollowUpService.findUpcoming(
+      {
+        clinicId: query.clinicId,
+        daysAhead: query.daysAhead,
+        page: query.page,
+        limit: query.limit,
+      },
+      user,
+    );
   }
 
   @Get('pending-assessment')
   findPendingAssessments(
     @Query() query: QueryPendingAssessmentsDto,
+    @CurrentUser() user: JwtPayloadUser,
   ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
-    return this.patientFollowUpService.findPendingAssessments({
-      clinicId: query.clinicId,
-      page: query.page,
-      limit: query.limit,
-    });
+    return this.patientFollowUpService.findPendingAssessments(
+      {
+        clinicId: query.clinicId,
+        page: query.page,
+        limit: query.limit,
+      },
+      user,
+    );
   }
 
   @Patch(':id/schedule')

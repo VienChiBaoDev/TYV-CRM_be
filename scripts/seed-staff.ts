@@ -14,70 +14,81 @@ const STAFF_SEED: Array<{
   email: string;
   fullName: string;
   role: StaffRole;
-  clinicCode: string | null;
+  clinicCodes: string[];
 }> = [
   {
     email: 'admin@tyv.vn',
     fullName: 'Quản trị viên',
     role: StaffRole.ADMIN,
-    clinicCode: null,
+    clinicCodes: [],
   },
   {
     email: 'doctor@tyv.vn',
     fullName: 'BS. Nguyễn Hoàng Nam',
     role: StaffRole.DOCTOR,
-    clinicCode: 'HANG_BONG',
+    clinicCodes: ['HANG_BONG', 'CAU_GIAY'],
   },
   {
     email: 'assistant@tyv.vn',
     fullName: 'Trợ lý Trần Thị Lan',
     role: StaffRole.ASSISTANT,
-    clinicCode: 'HANG_BONG',
+    clinicCodes: ['HANG_BONG'],
   },
   {
     email: 'staff@tyv.vn',
     fullName: 'Nhân viên Lê Văn Hùng',
     role: StaffRole.STAFF,
-    clinicCode: 'CAU_GIAY',
+    clinicCodes: ['CAU_GIAY'],
   },
 ];
 
-async function resolveClinicId(code: string | null): Promise<string | null> {
-  if (!code) return null;
-  const clinic = await prisma.clinic.findUnique({
-    where: { code },
-    select: { id: true },
-  });
-  if (!clinic) {
-    throw new Error(`Clinic not found for code: ${code}`);
+async function resolveClinicIds(codes: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const code of codes) {
+    const clinic = await prisma.clinic.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (!clinic) {
+      throw new Error(`Clinic not found for code: ${code}`);
+    }
+    ids.push(clinic.id);
   }
-  return clinic.id;
+  return ids;
+}
+
+async function syncStaffClinics(staffId: string, role: StaffRole, clinicIds: string[]) {
+  await prisma.staffClinic.deleteMany({ where: { staffId } });
+  if (role === StaffRole.ADMIN || clinicIds.length === 0) return;
+  await prisma.staffClinic.createMany({
+    data: clinicIds.map((clinicId) => ({ staffId, clinicId })),
+  });
 }
 
 async function main() {
   const passwordHash = await hash(DEFAULT_PASSWORD, 10);
 
   for (const staff of STAFF_SEED) {
-    const clinicId = await resolveClinicId(staff.clinicCode);
+    const clinicIds = await resolveClinicIds(staff.clinicCodes);
 
-    await prisma.staff.upsert({
+    const row = await prisma.staff.upsert({
       where: { email: staff.email },
       create: {
         email: staff.email,
         passwordHash,
         fullName: staff.fullName,
         role: staff.role,
-        clinicId,
         isActive: true,
       },
       update: {
         passwordHash,
         fullName: staff.fullName,
         role: staff.role,
-        clinicId,
         isActive: true,
       },
     });
+
+    await syncStaffClinics(row.id, staff.role, clinicIds);
     console.log(`✓ ${staff.role.padEnd(10)} ${staff.email}`);
   }
 
