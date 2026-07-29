@@ -12,6 +12,9 @@ import {
 } from './mappers/patient-payment.mapper';
 import { getMaxRefundable } from './patient-refund.rules';
 import { CreatePatientRefundDto, REFUND_REASON } from './dto/create-patient-refund.dto';
+import { QueryPatientPaymentsDto } from './dto/query-patient-payments.dto';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from '../common/dto/pagination-query.dto';
+import { buildPaginatedMeta } from '../common/pagination/paginate';
 import { PATIENT_SERVICE_BLOCKED_ACTION } from '../patient-service/patient-service-action.constants';
 import {
   assertPatientServiceIsActive,
@@ -39,16 +42,26 @@ export class PatientPaymentService {
   ) {}
 
   // tìm tất cả thanh toán của một bệnh nhân
-  async findAllByPatient(patientId: string): Promise<PatientPaymentsListResponse> {
+  async findAllByPatient(
+    patientId: string,
+    query: QueryPatientPaymentsDto = {},
+  ): Promise<PatientPaymentsListResponse> {
+    const page = query.page ?? DEFAULT_PAGE;
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const skip = (page - 1) * limit;
+
     // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, payments, aggregate, refundAggregate] = await Promise.all([
+    const [, payments, total, aggregate, refundAggregate] = await Promise.all([
       this.ensurePatientExists(patientId),
       /// findMany để lấy danh sách thanh toán của một bệnh nhân
       this.prisma.patientPayment.findMany({
         where: { patientId },
         include: paymentInclude,
         orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
       }),
+      this.prisma.patientPayment.count({ where: { patientId } }),
       /// aggregate để tính tổng số tiền thanh toán và hoàn trả của một bệnh nhân
       // Tổng số tiền dịch vụ của một bệnh nhân bao gồm cả dịch vụ đã thanh toán và chưa thanh toán
       // finalAmount: số tiền dịch vụ
@@ -75,6 +88,7 @@ export class PatientPaymentService {
     return {
       summary: mapPaymentSummary(servicesTotal, paidTotal, refundTotal),
       payments: payments.map(mapPatientPaymentToResponse),
+      meta: buildPaginatedMeta(page, limit, total),
     };
   }
 

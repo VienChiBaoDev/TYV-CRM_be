@@ -1,4 +1,5 @@
 import { PaymentMethod, Prisma } from '@prisma/client';
+import type { PaginatedMeta } from '../../common/interfaces/paginated-response.interface';
 import { buildInitials, decimalToNumber, formatDisplayDate } from '../../common/mapper-utils';
 // type PaymentWithRelations là để tạo type cho dữ liệu của bảng patient_payment
 // processedBy là để include dữ liệu từ bảng staff
@@ -48,6 +49,7 @@ export interface PatientPaymentSummaryResponse {
 export interface PatientPaymentsListResponse {
   readonly summary: PatientPaymentSummaryResponse;
   readonly payments: PatientPaymentResponse[];
+  readonly meta: PaginatedMeta;
 }
 // chuyển đổi phương thức thanh toán thành tên để hiển thị
 export function formatPaymentMethodLabel(

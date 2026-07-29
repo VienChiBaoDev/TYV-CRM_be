@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { CreatePatientPaymentDto } from './dto/create-patient-payment.dto';
@@ -8,6 +8,7 @@ import {
 } from './mappers/patient-payment.mapper';
 import { PatientPaymentService } from './patient-payment.service';
 import { CreatePatientRefundDto } from './dto/create-patient-refund.dto';
+import { QueryPatientPaymentsDto } from './dto/query-patient-payments.dto';
 
 // thanh toán của một bệnh nhân
 @Controller('patients/:patientId/payments')
@@ -18,8 +19,9 @@ export class PatientPaymentController {
   @Get()
   findAll(
     @Param('patientId', ParseUUIDPipe) patientId: string,
+    @Query() query: QueryPatientPaymentsDto,
   ): Promise<PatientPaymentsListResponse> {
-    return this.patientPaymentService.findAllByPatient(patientId);
+    return this.patientPaymentService.findAllByPatient(patientId, query);
   }
 
   // tạo thanh toán mới
