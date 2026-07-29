@@ -37,16 +37,12 @@ const patientInclude = {
   },
 } satisfies Prisma.PatientInclude;
 
-/** Quyền xem hồ sơ: ADMIN xem tất cả; hồ sơ chưa gán ai thì mọi người xem được;
- *  còn lại chỉ bác sĩ / trợ lý được gán mới xem được. */
+/** Quyền xem/sửa: ADMIN xem tất cả; còn lại chỉ bác sĩ / trợ lý được gán. */
 function canAccess(
   assigned: { assignedDoctors: { id: string }[]; assignedAssistants: { id: string }[] },
   user: JwtPayloadUser,
 ): boolean {
   if (user.role === 'ADMIN') return true;
-  if (assigned.assignedDoctors.length === 0 && assigned.assignedAssistants.length === 0) {
-    return true;
-  }
   return (
     assigned.assignedDoctors.some((staff) => staff.id === user.id) ||
     assigned.assignedAssistants.some((staff) => staff.id === user.id)
@@ -163,17 +159,10 @@ export class PatientService {
       });
     }
 
-    // Lọc quyền xem: ADMIN thấy tất cả; còn lại chỉ thấy hồ sơ chưa gán ai hoặc gán cho mình.
+    // Lọc quyền xem: ADMIN thấy tất cả; còn lại chỉ khách mình phụ trách.
     if (user.role !== 'ADMIN') {
       conditions.push({
         OR: [
-          // Hồ sơ chưa gán bác sĩ lẫn trợ lý → mọi người xem được
-          {
-            AND: [
-              { assignedDoctors: { none: {} } },
-              { assignedAssistants: { none: {} } },
-            ],
-          },
           { assignedDoctors: { some: { id: user.id } } },
           { assignedAssistants: { some: { id: user.id } } },
         ],
