@@ -10,7 +10,7 @@ export interface AuthUser {
   email: string;
   fullName: string;
   role: Staff['role'];
-  clinicBranch: Staff['clinicBranch'];
+  clinicId: string | null;
 }
 
 @Injectable()
@@ -40,7 +40,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       fullName: user.fullName,
-      clinicBranch: user.clinicBranch,
+      clinicId: user.clinicId,
     });
 
     return { accessToken, user };
@@ -60,7 +60,7 @@ export class AuthService {
       email: staff.email,
       fullName: staff.fullName,
       role: staff.role,
-      clinicBranch: staff.clinicBranch,
+      clinicId: staff.clinicId,
     };
   }
 }

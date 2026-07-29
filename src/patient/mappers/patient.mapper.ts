@@ -1,5 +1,4 @@
 import {
-  ClinicBranch,
   CustomerStatus,
   Gender,
   MedicalVisit,
@@ -25,7 +24,8 @@ export interface PatientDetailResponse {
   readonly phone: string;
   readonly address: string | null;
   readonly avatarInitials: string | null;
-  readonly clinicBranch: ClinicBranch;
+  readonly clinicId: string;
+  readonly clinicName: string | null;
   readonly tags: string[];
   readonly dietRestrictions: string[];
   readonly nextFollowUpDate: string | null;
@@ -52,6 +52,7 @@ type PatientWithVisits = Patient & {
   visits: VisitWithRelations[];
   assignedDoctors: AssignedStaffResponse[];
   assignedAssistants: AssignedStaffResponse[];
+  clinic?: { id: string; name: string } | null;
 };
 
 function computeAge(birthDate: Date | null): number | null {
@@ -101,7 +102,8 @@ export function mapPatientToDetailResponse(
     phone: patient.phone,
     address: patient.address,
     avatarInitials: patient.avatarInitials,
-    clinicBranch: patient.clinicBranch,
+    clinicId: patient.clinicId,
+    clinicName: patient.clinic?.name ?? null,
     tags: patient.tags,
     dietRestrictions: patient.dietRestrictions,
     nextFollowUpDate: patient.nextFollowUpDate

@@ -15,7 +15,7 @@ const staffSelect = {
   email: true,
   fullName: true,
   role: true,
-  clinicBranch: true,
+  clinicId: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
@@ -40,7 +40,7 @@ export class StaffService {
         id: true,
         fullName: true,
         role: true,
-        clinicBranch: true,
+        clinicId: true,
       },
       orderBy: { fullName: 'asc' },
     });
@@ -56,7 +56,7 @@ export class StaffService {
         passwordHash: await hash(dto.password, 10),
         fullName: dto.fullName,
         role: dto.role,
-        clinicBranch: dto.clinicBranch ?? null,
+        clinicId: dto.clinicId ?? null,
         isActive: dto.isActive ?? true,
       },
       select: staffSelect,
@@ -78,9 +78,7 @@ export class StaffService {
         ...(dto.password ? { passwordHash: await hash(dto.password, 10) } : {}),
         ...(dto.fullName !== undefined ? { fullName: dto.fullName } : {}),
         ...(dto.role !== undefined ? { role: dto.role } : {}),
-        ...(dto.clinicBranch !== undefined
-          ? { clinicBranch: dto.clinicBranch }
-          : {}),
+        ...(dto.clinicId !== undefined ? { clinicId: dto.clinicId } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
       select: staffSelect,

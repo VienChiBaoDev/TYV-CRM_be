@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { AppointmentStatus, ClinicBranch } from '@prisma/client';
+import { AppointmentStatus } from '@prisma/client';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -25,13 +25,13 @@ export class AppointmentController {
 
   @Get()
   findAll(
-    @Query('branch') branch?: ClinicBranch,
+    @Query('clinicId') clinicId?: string,
     @Query('status') status?: AppointmentStatus,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('doctorId') doctorId?: string,
   ) {
-    return this.appointmentService.findAll({ branch, status, from, to, doctorId });
+    return this.appointmentService.findAll({ clinicId, status, from, to, doctorId });
   }
 
   @Get(':id')

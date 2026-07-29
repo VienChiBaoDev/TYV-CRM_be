@@ -1,5 +1,4 @@
 import {
-  ClinicBranch,
   ClinicalAssessmentResult,
   FollowUpScheduleStatus,
   Patient,
@@ -30,11 +29,6 @@ export const FE_TO_ASSESSMENT_RESULT = {
   5: 'CANCELLED',
 } as const satisfies Record<number, ClinicalAssessmentResult>;
 
-const CLINIC_BRANCH_LABEL: Record<ClinicBranch, string> = {
-  HANG_BONG: 'Hàng Bông',
-  CAU_GIAY: 'Cầu Giấy',
-};
-
 // --- Response types ---
 export interface FollowUpScheduleItemResponse {
   readonly id: string;
@@ -43,8 +37,8 @@ export interface FollowUpScheduleItemResponse {
   readonly patientCode: string;
   readonly followUpDate: string;
   readonly physicianInCharge: string;
-  readonly facility: ClinicBranch;
-  readonly facilityLabel: string;
+  readonly clinicId: string;
+  readonly clinicName: string;
   readonly scheduleStatus: FollowUpScheduleStatus;
   readonly scheduleStatusFe: number;
   readonly originatingVisitId: string;
@@ -65,8 +59,8 @@ export interface PendingAssessmentItemResponse {
 }
 
 type FollowUpWithPatient = PatientFollowUp & {
-  // Pick lấy ra các field cần thiết từ Patient
   patient: Pick<Patient, 'id' | 'fullName' | 'patientCode'>;
+  clinic: Pick<{ id: string; name: string }, 'id' | 'name'>;
 };
 
 // Tính ngày tái khám hiệu lực (rescheduled hoặc original)
@@ -100,17 +94,15 @@ export function mapToScheduleItem(row: FollowUpWithPatient): FollowUpScheduleIte
     patientCode: row.patient.patientCode,
     followUpDate: formatDateOnly(row.followUpDate),
     physicianInCharge: row.physicianInCharge,
-    facility: row.facility,
-    facilityLabel: CLINIC_BRANCH_LABEL[row.facility],
+    clinicId: row.clinicId,
+    clinicName: row.clinic.name,
     scheduleStatus: row.scheduleStatus,
     scheduleStatusFe: SCHEDULE_STATUS_TO_FE[row.scheduleStatus],
     originatingVisitId: row.originatingVisitId,
-    // rescheduledFollowUpDate và rescheduleNote trả về cho FE để hiển thị lịch tái khám đã điều chỉnh
     rescheduledFollowUpDate: row.rescheduledFollowUpDate
       ? formatDateOnly(row.rescheduledFollowUpDate)
       : null,
     rescheduleNote: row.rescheduleNote,
-    // effectiveFollowUpDate giúp FE không phải tự tính rescheduled ?? original
     effectiveFollowUpDate: formatDateOnly(effective),
   };
 }

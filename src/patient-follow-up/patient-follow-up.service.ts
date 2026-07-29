@@ -13,7 +13,7 @@ import {
   mapToScheduleItem,
   startOfTodayUtc,
 } from './mappers/follow-up.mapper';
-import { ClinicBranch, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PrismaTransactionService } from 'src/prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
@@ -33,6 +33,9 @@ const followUpInclude = {
   patient: {
     select: { id: true, fullName: true, patientCode: true },
   },
+  clinic: {
+    select: { id: true, name: true },
+  },
 } satisfies Prisma.PatientFollowUpInclude;
 
 @Injectable()
@@ -46,12 +49,11 @@ export class PatientFollowUpService {
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
   async findUpcoming(params: {
-    branch?: ClinicBranch;
+    clinicId?: string;
     daysAhead?: number;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
-    const branch = params.branch ?? ClinicBranch.HANG_BONG;
     // N ngày tới
     const daysAhead = params.daysAhead ?? DEFAULT_DAYS_AHEAD;
     const page = params.page ?? DEFAULT_PAGE;
@@ -100,7 +102,7 @@ export class PatientFollowUpService {
           },
         ],
         /** Tại cơ sở */
-        ...(branch ? { facility: branch } : {}),
+        ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       },
       include: followUpInclude,
       orderBy: {
@@ -118,7 +120,7 @@ export class PatientFollowUpService {
   }
   /** Bảng 2: Hỏi thăm — đến hạn assessmentDate, cùng quy tắc ẩn/hiện với findUpcoming */
   async findPendingAssessments(params: {
-    branch?: ClinicBranch;
+    clinicId?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
@@ -162,7 +164,7 @@ export class PatientFollowUpService {
           },
         ],
         /** Tại cơ sở */
-        ...(params.branch ? { facility: params.branch } : {}),
+        ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       },
       include: followUpInclude,
       orderBy: {
@@ -201,7 +203,7 @@ export class PatientFollowUpService {
       staffId: body.doctorId,
       startAt: scheduledAt,
       endAt: endedAt,
-      branch: followUp.facility,
+      clinicId: followUp.clinicId,
       staffLabel: 'Bác sĩ',
     });
 
@@ -210,7 +212,7 @@ export class PatientFollowUpService {
         staffId: body.assistantId,
         startAt: scheduledAt,
         endAt: endedAt,
-        branch: followUp.facility,
+        clinicId: followUp.clinicId,
         staffLabel: 'Trợ lý',
       });
     }
@@ -243,7 +245,7 @@ export class PatientFollowUpService {
           assistantId: body.assistantId ?? null,
           doctorName: doctor?.fullName ?? body.doctorName ?? followUp.physicianInCharge,
           assistantName: assistant?.fullName ?? body.assistantName ?? null,
-          clinicBranch: followUp.facility,
+          clinicId: followUp.clinicId,
           note: body.note,
         },
       });

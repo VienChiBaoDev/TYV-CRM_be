@@ -1,10 +1,10 @@
-import { ClinicBranch, StaffShiftType } from '@prisma/client';
-import { IsEnum, IsISO8601, IsOptional, IsString, MaxLength } from 'class-validator';
+import { StaffShiftType } from '@prisma/client';
+import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateStaffShiftDto {
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch;
+  @IsUUID()
+  clinicId?: string;
 
   @IsOptional()
   @IsEnum(StaffShiftType)

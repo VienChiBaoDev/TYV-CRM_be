@@ -15,7 +15,8 @@ model Staff {
   passwordHash             String                 @map("password_hash")
   fullName                 String                 @map("full_name")
   role                     StaffRole
-  clinicBranch             ClinicBranch?          @map("clinic_branch")
+  clinicId                 String?                @map("clinic_id") @db.Uuid
+  clinic                   Clinic?                @relation(fields: [clinicId], references: [id])
   isActive                 Boolean                @default(true) @map("is_active")
   createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -46,14 +47,15 @@ model Staff {
   prescriptionFormulaTemplates PrescriptionFormulaTemplate[]
 
   @@index([role])
-  @@index([clinicBranch])
+  @@index([clinicId])
   @@map("staff")
 }
 
 model StaffShift {
   id           String         @id @default(uuid()) @db.Uuid
   staffId      String         @map("staff_id") @db.Uuid
-  clinicBranch ClinicBranch   @map("clinic_branch")
+  clinicId     String         @map("clinic_id") @db.Uuid
+  clinic       Clinic         @relation(fields: [clinicId], references: [id])
   type         StaffShiftType @default(WORK)
   startAt      DateTime       @map("start_at") @db.Timestamptz(6)
   endAt        DateTime       @map("end_at") @db.Timestamptz(6)
@@ -63,7 +65,7 @@ model StaffShift {
   staff        Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@index([staffId, startAt])
-  @@index([clinicBranch, startAt])
+  @@index([clinicId, startAt])
   @@map("staff_shifts")
 }
 
@@ -78,7 +80,8 @@ model Patient {
   phone            String
   address          String?
   avatarInitials   String?                @map("avatar_initials")
-  clinicBranch     ClinicBranch           @default(HANG_BONG) @map("clinic_branch")
+  clinicId         String                 @map("clinic_id") @db.Uuid
+  clinic           Clinic                 @relation(fields: [clinicId], references: [id])
   tags             String[]               @default([])
   dietRestrictions String[]               @default([]) @map("diet_restrictions")
   nextFollowUpDate DateTime?              @map("next_follow_up_date") @db.Date
@@ -100,7 +103,7 @@ model Patient {
 
   @@index([fullName])
   @@index([phone])
-  @@index([clinicBranch])
+  @@index([clinicId])
   @@index([nextFollowUpDate])
   @@index([customerStatus])
   @@index([referrerId])
@@ -200,7 +203,8 @@ model PatientFollowUp {
   followUpDate       DateTime                  @map("follow_up_date") @db.Date
   assessmentDate     DateTime                  @map("assessment_date") @db.Date
   physicianInCharge  String                    @map("physician_in_charge")
-  facility           ClinicBranch              @default(HANG_BONG)
+  clinicId           String                    @map("clinic_id") @db.Uuid
+  clinic             Clinic                    @relation(fields: [clinicId], references: [id])
   scheduleStatus     FollowUpScheduleStatus    @default(NOT_SCHEDULED) @map("schedule_status")
   assessmentResult   ClinicalAssessmentResult? @map("assessment_result")
   assessmentNote     String?                   @map("assessment_note")
@@ -240,7 +244,8 @@ model Appointment {
   assistantId   String?           @map("assistant_id") @db.Uuid
   doctorName    String?           @map("doctor_name")
   assistantName String?           @map("assistant_name")
-  clinicBranch  ClinicBranch      @default(HANG_BONG) @map("clinic_branch")
+  clinicId      String            @map("clinic_id") @db.Uuid
+  clinic        Clinic            @relation(fields: [clinicId], references: [id])
   status        AppointmentStatus @default(BOOKED)
   note          String?
   visitId       String?           @map("visit_id") @db.Uuid
@@ -273,6 +278,29 @@ model Referrer {
   patients       Patient[]
 
   @@map("referrers")
+}
+
+/// Cơ sở / chi nhánh phòng khám — quản lý ở màn Cài đặt.
+/// Nền cho gắn nhân sự, lịch hẹn, bệnh nhân theo cơ sở (phase sau).
+model Clinic {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  address   String?
+  note      String?
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  staff        Staff[]
+  staffShifts  StaffShift[]
+  patients     Patient[]
+  appointments Appointment[]
+  followUps    PatientFollowUp[]
+
+  @@index([isActive, sortOrder])
+  @@map("clinics")
 }
 
 /// Tài khoản ngân hàng của phòng khám — quản lý ở màn Cài đặt,
@@ -590,11 +618,6 @@ enum ClinicalImageCategory {
 enum Gender {
   MALE
   FEMALE
-}
-
-enum ClinicBranch {
-  HANG_BONG
-  CAU_GIAY
 }
 
 enum VisitMode {

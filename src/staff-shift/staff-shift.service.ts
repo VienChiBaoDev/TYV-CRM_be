@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ClinicBranch, Prisma, StaffShiftType } from '@prisma/client';
+import { Prisma, StaffShiftType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
@@ -18,7 +18,7 @@ import {
 
 const shiftInclude = {
   staff: {
-    select: { id: true, fullName: true, role: true, clinicBranch: true },
+    select: { id: true, fullName: true, role: true, clinicId: true },
   },
 } satisfies Prisma.StaffShiftInclude;
 
@@ -26,7 +26,7 @@ export interface AssertStaffAvailableParams {
   staffId: string;
   startAt: Date;
   endAt: Date;
-  branch: ClinicBranch;
+  clinicId: string;
   staffLabel: string;
 }
 
@@ -39,7 +39,7 @@ export class StaffShiftService {
   findAll(params: QueryStaffShiftDto) {
     const where: Prisma.StaffShiftWhereInput = {
       staffId: params.staffId,
-      ...(params.branch ? { clinicBranch: params.branch } : {}),
+      ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       startAt: { gte: new Date(params.from) },
       endAt: { lte: new Date(params.to) },
     };
@@ -90,7 +90,7 @@ export class StaffShiftService {
     return this.prisma.staffShift.create({
       data: {
         staffId: dto.staffId,
-        clinicBranch: dto.clinicBranch,
+        clinicId: dto.clinicId,
         type: dto.type,
         startAt,
         endAt,
@@ -122,7 +122,7 @@ export class StaffShiftService {
     return this.prisma.staffShift.update({
       where: { id },
       data: {
-        ...(dto.clinicBranch !== undefined ? { clinicBranch: dto.clinicBranch } : {}),
+        ...(dto.clinicId !== undefined ? { clinicId: dto.clinicId } : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
         ...(dto.startAt !== undefined ? { startAt } : {}),
         ...(dto.endAt !== undefined ? { endAt } : {}),
@@ -159,7 +159,7 @@ export class StaffShiftService {
    * Nếu không, throw lỗi.
    */
   async assertStaffAvailableForAppointment(params: AssertStaffAvailableParams): Promise<void> {
-    const { staffId, startAt, endAt, branch, staffLabel } = params;
+    const { staffId, startAt, endAt, clinicId, staffLabel } = params;
     const staff = await this.prisma.staff.findUnique({
       where: { id: staffId },
       select: { id: true, isActive: true, fullName: true },
@@ -184,7 +184,7 @@ export class StaffShiftService {
     const workShifts = await this.prisma.staffShift.findMany({
       where: {
         staffId,
-        clinicBranch: branch,
+        clinicId,
         type: StaffShiftType.WORK,
         startAt: { lt: endAt },
         endAt: { gt: startAt },

@@ -1,4 +1,4 @@
-import { ClinicBranch, Gender } from '@prisma/client';
+import { Gender } from '@prisma/client';
 import {
   IsArray,
   IsEnum,
@@ -44,8 +44,8 @@ export class CreatePatientDto {
   source?: string;
 
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch;
+  @IsUUID()
+  clinicId?: string;
 
   @IsOptional()
   @IsUUID()

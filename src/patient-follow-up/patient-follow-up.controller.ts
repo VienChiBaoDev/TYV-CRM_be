@@ -22,7 +22,7 @@ export class PatientFollowUpController {
     @Query() query: QueryUpcomingFollowUpsDto,
   ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
     return this.patientFollowUpService.findUpcoming({
-      branch: query.branch,
+      clinicId: query.clinicId,
       daysAhead: query.daysAhead,
       page: query.page,
       limit: query.limit,
@@ -34,7 +34,7 @@ export class PatientFollowUpController {
     @Query() query: QueryPendingAssessmentsDto,
   ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
     return this.patientFollowUpService.findPendingAssessments({
-      branch: query.branch,
+      clinicId: query.clinicId,
       page: query.page,
       limit: query.limit,
     });

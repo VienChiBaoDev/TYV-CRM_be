@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
-  ClinicBranch,
   Prisma,
   StaffRole,
   VisitMode,
@@ -25,16 +24,8 @@ import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 import { BLOCKING_APPOINTMENT_STATUSES } from './appointment-overlap.rules';
 
-// record để mapping branch với location
-const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
-  [ClinicBranch.HANG_BONG]: 'Hàng Bông',
-  [ClinicBranch.CAU_GIAY]: 'Cầu Giấy',
-};
-
-const DEFAULT_BRANCH = ClinicBranch.HANG_BONG;
-
 interface FindAppointmentsParams {
-  branch?: ClinicBranch;
+  clinicId?: string;
   status?: AppointmentStatus;
   from?: string;
   to?: string;
@@ -71,14 +62,14 @@ export class AppointmentService {
     this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     const startAt = new Date(dto.scheduledAt);
     const endAt = new Date(dto.endedAt);
-    const branch = dto.clinicBranch ?? DEFAULT_BRANCH;
+    const clinicId = dto.clinicId;
 
     await this.assertAssignedStaffAvailable({
       doctorId: dto.doctorId,
       assistantId: dto.assistantId,
       startAt,
       endAt,
-      branch,
+      clinicId,
     });
 
     await this.assertNoSchedulingConflict({
@@ -99,7 +90,7 @@ export class AppointmentService {
         assistantId: assignment.assistantId,
         doctorName: assignment.doctorName,
         assistantName: assignment.assistantName,
-        clinicBranch: branch,
+        clinicId,
         note: dto.note,
       },
     });
@@ -117,7 +108,7 @@ export class AppointmentService {
     }
 
     const where: Prisma.AppointmentWhereInput = {
-      ...(params.branch ? { clinicBranch: params.branch } : {}),
+      ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.doctorId ? { doctorId: params.doctorId } : {}),
       ...(params.from || params.to
@@ -175,7 +166,7 @@ export class AppointmentService {
     if (!isCancelling && this.shouldValidateStaffShift(dto)) {
       const startAt = new Date(dto.scheduledAt ?? current.scheduledAt);
       const endAt = new Date(dto.endedAt ?? current.endedAt);
-      const branch = dto.clinicBranch ?? current.clinicBranch;
+      const clinicId = dto.clinicId ?? current.clinicId;
       const doctorId = await this.resolveDoctorId(
         dto.doctorId,
         dto.doctorName ?? current.doctorName,
@@ -191,7 +182,7 @@ export class AppointmentService {
         assistantId,
         startAt,
         endAt,
-        branch,
+        clinicId,
       });
       await this.assertNoSchedulingConflict({
         doctorId,
@@ -237,7 +228,7 @@ export class AppointmentService {
             ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
             ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
             ...staffAssignmentData,
-            ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+            ...(dto.clinicId ? { clinicId: dto.clinicId } : {}),
             status: AppointmentStatus.CANCELLED,
             ...(dto.note !== undefined ? { note: dto.note } : {}),
           },
@@ -263,7 +254,7 @@ export class AppointmentService {
         ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
         ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
         ...staffAssignmentData,
-        ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+        ...(dto.clinicId ? { clinicId: dto.clinicId } : {}),
         ...(dto.status ? { status: dto.status } : {}),
         ...(dto.note !== undefined ? { note: dto.note } : {}),
       },
@@ -319,7 +310,7 @@ export class AppointmentService {
       dto.assistantId !== undefined ||
       dto.doctorName !== undefined ||
       dto.assistantName !== undefined ||
-      dto.clinicBranch,
+      dto.clinicId,
     );
   }
   /**
@@ -331,14 +322,14 @@ export class AppointmentService {
     assistantId?: string | null;
     startAt: Date;
     endAt: Date;
-    branch: ClinicBranch;
+    clinicId: string;
   }): Promise<void> {
-    const { doctorId, assistantId, startAt, endAt, branch } = params;
+    const { doctorId, assistantId, startAt, endAt, clinicId } = params;
     await this.staffShiftService.assertStaffAvailableForAppointment({
       staffId: doctorId,
       startAt,
       endAt,
-      branch,
+      clinicId,
       staffLabel: 'Bác sĩ',
     });
     if (assistantId) {
@@ -346,7 +337,7 @@ export class AppointmentService {
         staffId: assistantId,
         startAt,
         endAt,
-        branch,
+        clinicId,
         staffLabel: 'Trợ lý',
       });
     }
@@ -471,6 +462,7 @@ export class AppointmentService {
         patient: {
           select: { id: true, fullName: true, patientCode: true, phone: true },
         },
+        clinic: { select: { name: true } },
       },
     });
     if (!appointment) {
@@ -494,7 +486,7 @@ export class AppointmentService {
           visitDate: new Date(`${visitDate}T00:00:00.000Z`),
           doctorName: appointment.doctorName ?? 'Chưa phân công',
           mode: VisitMode.IN_PERSON,
-          location: BRANCH_TO_LOCATION[appointment.clinicBranch],
+          location: appointment.clinic.name,
           status: VisitStatus.INITIAL_EXAM,
         },
       });

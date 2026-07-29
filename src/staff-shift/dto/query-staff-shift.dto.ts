@@ -1,13 +1,12 @@
-import { ClinicBranch } from '@prisma/client';
-import { IsEnum, IsISO8601, IsOptional, IsUUID } from 'class-validator';
+import { IsISO8601, IsOptional, IsUUID } from 'class-validator';
 
 export class QueryStaffShiftDto {
   @IsUUID()
   staffId!: string;
 
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  branch?: ClinicBranch;
+  @IsUUID()
+  clinicId?: string;
 
   @IsISO8601()
   from!: string;

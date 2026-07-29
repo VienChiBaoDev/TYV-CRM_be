@@ -15,7 +15,7 @@ export interface JwtPayloadUser {
   email: string;
   role: string;
   fullName: string;
-  clinicBranch: string | null;
+  clinicId: string | null;
 }
 
 /** Guard toàn cục: yêu cầu Bearer token hợp lệ cho mọi route trừ @Public(). */
@@ -49,7 +49,7 @@ export class JwtAuthGuard implements CanActivate {
         email: payload.email,
         role: payload.role,
         fullName: payload.fullName,
-        clinicBranch: payload.clinicBranch ?? null,
+        clinicId: payload.clinicId ?? null,
       };
     } catch {
       throw new UnauthorizedException(

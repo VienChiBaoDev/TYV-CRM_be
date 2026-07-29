@@ -1,9 +1,10 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ClinicBranch, CustomerStatus, Prisma } from '@prisma/client';
+import { CustomerStatus, Prisma } from '@prisma/client';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,18 +14,23 @@ import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/pat
 
 interface FindPatientsParams {
   search?: string;
-  branch?: ClinicBranch;
+  clinicId?: string;
   referrerId?: string;
 }
 
 const patientInclude = {
+  clinic: { select: { id: true, name: true } },
   assignedDoctors: { select: { id: true, fullName: true } },
   assignedAssistants: { select: { id: true, fullName: true } },
   visits: {
     include: {
       herbs: { orderBy: { sortOrder: 'asc' as const } },
       clinicalImages: { orderBy: { sortOrder: 'asc' as const } },
-      followUpsOriginated: true,
+      followUpsOriginated: {
+        include: {
+          clinic: { select: { id: true, name: true } },
+        },
+      },
     },
     orderBy: { visitNumber: 'asc' as const },
   },
@@ -55,6 +61,10 @@ export class PatientService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePatientDto) {
+    if (!dto.clinicId) {
+      throw new BadRequestException('Vui lòng chọn cơ sở');
+    }
+
     const patientCode = await this.generatePatientCode();
 
     return this.prisma.patient.create({
@@ -67,7 +77,7 @@ export class PatientService {
         occupation: dto.occupation,
         address: dto.address,
         source: dto.source,
-        clinicBranch: dto.clinicBranch ?? ClinicBranch.HANG_BONG,
+        clinicId: dto.clinicId,
         customerStatus: CustomerStatus.LEAD,
         referrerId: dto.referrerId,
         avatarInitials: buildInitials(dto.fullName),
@@ -113,7 +123,7 @@ export class PatientService {
         ...(dto.occupation !== undefined && { occupation: dto.occupation }),
         ...(dto.address !== undefined && { address: dto.address }),
         ...(dto.source !== undefined && { source: dto.source }),
-        ...(dto.clinicBranch !== undefined && { clinicBranch: dto.clinicBranch }),
+        ...(dto.clinicId !== undefined && { clinicId: dto.clinicId }),
         ...(dto.referrerId !== undefined && { referrerId: dto.referrerId }),
         // set thay thế toàn bộ danh sách phụ trách khi payload có gửi field tương ứng
         ...(dto.assignedDoctorIds !== undefined && {
@@ -134,7 +144,7 @@ export class PatientService {
   findAll(params: FindPatientsParams, user: JwtPayloadUser) {
     const conditions: Prisma.PatientWhereInput[] = [];
 
-    if (params.branch) conditions.push({ clinicBranch: params.branch });
+    if (params.clinicId) conditions.push({ clinicId: params.clinicId });
     if (params.referrerId) conditions.push({ referrerId: params.referrerId });
     if (params.search) {
       conditions.push({

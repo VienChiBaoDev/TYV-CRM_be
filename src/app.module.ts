@@ -10,6 +10,7 @@ import { AppService } from './app.service';
 import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
 import { BankAccountModule } from './bank-account/bank-account.module';
+import { ClinicModule } from './clinic/clinic.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { MedicalCaseModule } from './medical-case/medical-case.module';
@@ -65,6 +66,7 @@ import { ConsumableModule } from './consumable/consumable.module';
     StaffShiftModule,
     PrescriptionFormulaTemplateModule,
     BankAccountModule,
+    ClinicModule,
     ConsumableModule,
   ],
   controllers: [AppController],

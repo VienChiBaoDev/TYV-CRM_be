@@ -17,7 +17,6 @@ import {
   VisitClinicalImageResponse,
   mapVisitToResponse,
   parseDateOnly,
-  resolveClinicBranchFromLocation,
   subtractDays,
   toCustomerStatus,
 } from './mappers/visit.mapper';
@@ -42,7 +41,11 @@ const MIME_EXTENSION: Record<string, string> = {
 const visitInclude = {
   herbs: { orderBy: { sortOrder: 'asc' as const } },
   clinicalImages: { orderBy: { sortOrder: 'asc' as const } },
-  followUpsOriginated: true,
+  followUpsOriginated: {
+    include: {
+      clinic: { select: { id: true, name: true } },
+    },
+  },
 } satisfies Prisma.MedicalVisitInclude;
 
 @Injectable()
@@ -371,7 +374,7 @@ export class MedicalVisitService {
   ) {
     const followUpDate = parseDateOnly(plan.followUpDate);
     const assessmentDate = subtractDays(plan.followUpDate, plan.reminderDaysBefore);
-    const facility = resolveClinicBranchFromLocation(location);
+    const clinicId = await this.resolveClinicIdForFollowUp(tx, location, patientId);
     const customerStatus = toCustomerStatus(plan.treatmentStatus);
 
     const existing = await tx.patientFollowUp.findFirst({
@@ -385,7 +388,7 @@ export class MedicalVisitService {
             followUpDate,
             assessmentDate,
             physicianInCharge,
-            facility,
+            clinicId,
           },
         })
       : await tx.patientFollowUp.create({
@@ -395,7 +398,7 @@ export class MedicalVisitService {
             followUpDate,
             assessmentDate,
             physicianInCharge,
-            facility,
+            clinicId,
           },
         });
 
@@ -407,6 +410,26 @@ export class MedicalVisitService {
     });
 
     return followUp;
+  }
+
+  private async resolveClinicIdForFollowUp(
+    tx: Prisma.TransactionClient,
+    location: string,
+    patientId: string,
+  ): Promise<string> {
+    const byName = await tx.clinic.findFirst({
+      where: { name: location },
+      select: { id: true },
+    });
+    if (byName) return byName.id;
+
+    const patient = await tx.patient.findUnique({
+      where: { id: patientId },
+      select: { clinicId: true },
+    });
+    if (patient?.clinicId) return patient.clinicId;
+
+    throw new BadRequestException('Không xác định được cơ sở khám');
   }
 
   private async computeNextFollowUpDate(
