@@ -20,8 +20,9 @@ export class PatientPaymentController {
   findAll(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Query() query: QueryPatientPaymentsDto,
+    @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientPaymentsListResponse> {
-    return this.patientPaymentService.findAllByPatient(patientId, query);
+    return this.patientPaymentService.findAllByPatient(patientId, query, user);
   }
 
   // tạo thanh toán mới
@@ -32,7 +33,7 @@ export class PatientPaymentController {
     // lấy thông tin người dùng đã đăng nhập
     @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientPaymentResponse> {
-    return this.patientPaymentService.create(patientId, dto, user.id);
+    return this.patientPaymentService.create(patientId, dto, user);
   }
 
   // tạo hoàn trả thanh toán
@@ -42,6 +43,6 @@ export class PatientPaymentController {
     @Body() dto: CreatePatientRefundDto,
     @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientPaymentResponse> {
-    return this.patientPaymentService.createRefund(patientId, dto, user.id);
+    return this.patientPaymentService.createRefund(patientId, dto, user);
   }
 }

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PatientServiceStatus, Prisma } from '@prisma/client';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
@@ -51,7 +53,12 @@ export class PatientTreatmentService {
   /**
    * Find all sessions by service
    */
-  async findByService(patientId: string, serviceId: string): Promise<TreatmentSessionListResponse> {
+  async findByService(
+    patientId: string,
+    serviceId: string,
+    user: JwtPayloadUser,
+  ): Promise<TreatmentSessionListResponse> {
+    await assertPatientAccess(this.prisma, user, patientId);
     // Lấy dịch vụ đã thanh toán và hoạt động
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     // Tính tổng số buổi điều trị
@@ -78,12 +85,13 @@ export class PatientTreatmentService {
   /**
    * Find all sessions by patient
    */
-  async findAllByPatient(patientId: string): Promise<TreatmentHistoryItemResponse[]> {
-    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, sessions] = await Promise.all([
-      this.ensurePatientExists(patientId),
-      // Lấy danh sách điều trị chi tiết
-      this.prisma.patientTreatmentSession.findMany({
+  async findAllByPatient(
+    patientId: string,
+    user: JwtPayloadUser,
+  ): Promise<TreatmentHistoryItemResponse[]> {
+    await assertPatientAccess(this.prisma, user, patientId);
+
+    const sessions = await this.prisma.patientTreatmentSession.findMany({
         where: {
           patientServiceRecord: { patientId },
         },
@@ -101,8 +109,7 @@ export class PatientTreatmentService {
           },
         },
         orderBy: [{ performedAt: 'desc' }],
-      }),
-    ]);
+      });
 
     return sessions.map((session) => {
       const sessionTotal = getSessionTotal(session.patientServiceRecord);
@@ -130,8 +137,9 @@ export class PatientTreatmentService {
     patientId: string,
     serviceId: string,
     dto: UpsertTreatmentSessionDto,
-    performedById: string,
+    user: JwtPayloadUser,
   ): Promise<TreatmentSessionResponse> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     /**
      * Lấy dịch vụ đã thanh toán và hoạt động
      */
@@ -185,7 +193,7 @@ export class PatientTreatmentService {
               nextContent: dto.nextContent?.trim() || null,
               nextTreatmentDate: dto.nextTreatmentDate ? new Date(dto.nextTreatmentDate) : null,
               performedAt: now,
-              performedById,
+              performedById: user.id,
             },
             include: sessionInclude,
           });
@@ -240,11 +248,16 @@ export class PatientTreatmentService {
     serviceId: string,
     sessionNumber: number,
     file: Express.Multer.File,
-    performedById: string,
+    user: JwtPayloadUser,
   ): Promise<TreatmentSessionImageResponse> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     this.validateSessionNumber(service, sessionNumber);
-    const session = await this.ensureSessionForImageUpload(serviceId, sessionNumber, performedById);
+    const session = await this.ensureSessionForImageUpload(
+      serviceId,
+      sessionNumber,
+      user.id,
+    );
     this.assertValidImageFile(file);
     const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
     const storagePath = `patients/${patientId}/treatment/${serviceId}/session-${sessionNumber}/${randomUUID()}.${extension}`;
@@ -277,7 +290,9 @@ export class PatientTreatmentService {
     serviceId: string,
     sessionNumber: number,
     imageId: string,
+    user: JwtPayloadUser,
   ): Promise<void> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     this.validateSessionNumber(service, sessionNumber);
     const session = await this.prisma.patientTreatmentSession.findUnique({
@@ -355,20 +370,6 @@ export class PatientTreatmentService {
     }
   }
 
-  /**
-   * Ensure patient exists
-   */
-  private async ensurePatientExists(patientId: string) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-      select: { id: true },
-    });
-    if (!patient) throw new NotFoundException('Không tìm thấy bệnh nhân');
-  }
-
-  /**
-   * Ensure staff exists
-   */
   private async ensureStaffExists(staffId: string, label: string) {
     const staff = await this.prisma.staff.findUnique({
       where: { id: staffId },

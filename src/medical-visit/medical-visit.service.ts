@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ClinicalImageCategory, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
@@ -56,28 +58,37 @@ export class MedicalVisitService {
     private readonly supabaseStorage: SupabaseStorageService,
   ) {}
 
-  async findAllByPatient(patientId: string): Promise<MedicalVisitResponse[]> {
-    // Chạy song song với query chính — nếu patient không tồn tại, ensurePatientExists
-    // vẫn throw 404 như cũ (findMany chỉ trả về rỗng), nhưng không tốn thêm 1 round-trip nối tiếp
-    const [, visits] = await Promise.all([
-      this.ensurePatientExists(patientId),
-      this.prisma.medicalVisit.findMany({
-        where: { patientId },
-        include: visitInclude,
-        orderBy: [{ visitDate: 'desc' }, { visitNumber: 'desc' }],
-      }),
-    ]);
+  async findAllByPatient(
+    patientId: string,
+    user: JwtPayloadUser,
+  ): Promise<MedicalVisitResponse[]> {
+    await assertPatientAccess(this.prisma, user, patientId);
+
+    const visits = await this.prisma.medicalVisit.findMany({
+      where: { patientId },
+      include: visitInclude,
+      orderBy: [{ visitDate: 'desc' }, { visitNumber: 'desc' }],
+    });
 
     return visits.map(mapVisitToResponse);
   }
 
-  async findOne(patientId: string, visitId: string): Promise<MedicalVisitResponse> {
+  async findOne(
+    patientId: string,
+    visitId: string,
+    user: JwtPayloadUser,
+  ): Promise<MedicalVisitResponse> {
+    await assertPatientAccess(this.prisma, user, patientId);
     const visit = await this.getVisitOrThrow(patientId, visitId);
     return mapVisitToResponse(visit);
   }
 
-  async create(patientId: string, dto: CreateMedicalVisitDto): Promise<MedicalVisitResponse> {
-    await this.ensurePatientExists(patientId);
+  async create(
+    patientId: string,
+    dto: CreateMedicalVisitDto,
+    user: JwtPayloadUser,
+  ): Promise<MedicalVisitResponse> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     const visit = await this.prismaTx.$transaction(async (tx) => {
       // Lấy số thứ tự của lần khám mới nhất theo id khách hàng
@@ -116,7 +127,9 @@ export class MedicalVisitService {
     patientId: string,
     visitId: string,
     dto: UpdateMedicalVisitDto,
+    user: JwtPayloadUser,
   ): Promise<MedicalVisitResponse> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     // Lấy lần khám cũ
     const existing = await this.getVisitOrThrow(patientId, visitId);
 
@@ -185,7 +198,8 @@ export class MedicalVisitService {
     return mapVisitToResponse(visit);
   }
 
-  async remove(patientId: string, visitId: string): Promise<void> {
+  async remove(patientId: string, visitId: string, user: JwtPayloadUser): Promise<void> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     await this.getVisitOrThrow(patientId, visitId);
 
     await this.prismaTx.$transaction(async (tx) => {
@@ -199,7 +213,9 @@ export class MedicalVisitService {
     visitId: string,
     file: Express.Multer.File,
     category: ClinicalImageCategory,
+    user: JwtPayloadUser,
   ): Promise<VisitClinicalImageResponse> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     // Lấy lần khám
     await this.getVisitOrThrow(patientId, visitId);
     // Kiểm tra file ảnh
@@ -241,7 +257,13 @@ export class MedicalVisitService {
     };
   }
 
-  async deleteClinicalImage(patientId: string, visitId: string, imageId: string): Promise<void> {
+  async deleteClinicalImage(
+    patientId: string,
+    visitId: string,
+    imageId: string,
+    user: JwtPayloadUser,
+  ): Promise<void> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
     // Lấy lần khám
     await this.getVisitOrThrow(patientId, visitId);
     // Lấy ảnh khám
@@ -262,17 +284,6 @@ export class MedicalVisitService {
 
     // Xóa ảnh khám từ database
     await this.prisma.visitClinicalImage.delete({ where: { id: imageId } });
-  }
-  // Kiểm tra khách hàng tồn tại
-  private async ensurePatientExists(patientId: string): Promise<void> {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-      select: { id: true },
-    });
-
-    if (!patient) {
-      throw new NotFoundException('Patient not found');
-    }
   }
   // Lấy lần khám theo id khách hàng và id lần khám
   private async getVisitOrThrow(patientId: string, visitId: string) {

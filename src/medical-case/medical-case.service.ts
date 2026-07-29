@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface MedicalCaseResponse {
@@ -14,8 +16,11 @@ export interface MedicalCaseResponse {
 export class MedicalCaseService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByPatient(patientId: string): Promise<MedicalCaseResponse | null> {
-    await this.ensurePatientExists(patientId);
+  async findByPatient(
+    patientId: string,
+    user: JwtPayloadUser,
+  ): Promise<MedicalCaseResponse | null> {
+    await assertPatientAccess(this.prisma, user, patientId);
 
     const medicalCase = await this.prisma.medicalCase.findUnique({
       where: { patientId },
@@ -29,8 +34,9 @@ export class MedicalCaseService {
   async upsert(
     patientId: string,
     formData: Record<string, unknown>,
+    user: JwtPayloadUser,
   ): Promise<MedicalCaseResponse> {
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     const medicalCase = await this.prisma.medicalCase.upsert({
       where: { patientId },
@@ -44,17 +50,6 @@ export class MedicalCaseService {
     });
 
     return this.mapToResponse(medicalCase);
-  }
-
-  private async ensurePatientExists(patientId: string): Promise<void> {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-      select: { id: true },
-    });
-
-    if (!patient) {
-      throw new NotFoundException('Patient not found');
-    }
   }
 
   private mapToResponse(medicalCase: {

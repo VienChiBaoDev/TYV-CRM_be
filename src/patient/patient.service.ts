@@ -1,12 +1,8 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerStatus, Prisma } from '@prisma/client';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertClinicAccess } from '../auth/clinic-access';
+import { assertPatientAccess } from '../auth/patient-access';
 import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
@@ -37,22 +33,6 @@ const patientInclude = {
   },
 } satisfies Prisma.PatientInclude;
 
-/** Quyền xem/sửa: ADMIN xem tất cả; còn lại chỉ bác sĩ / trợ lý được gán. */
-function canAccess(
-  assigned: { assignedDoctors: { id: string }[]; assignedAssistants: { id: string }[] },
-  user: JwtPayloadUser,
-): boolean {
-  if (user.role === 'ADMIN') return true;
-  return (
-    assigned.assignedDoctors.some((staff) => staff.id === user.id) ||
-    assigned.assignedAssistants.some((staff) => staff.id === user.id)
-  );
-}
-
-// Quyền sửa hồ sơ dùng chung quy tắc với quyền xem.
-const canView = canAccess;
-const canEdit = canAccess;
-
 @Injectable()
 export class PatientService {
   constructor(private readonly prisma: PrismaService) {}
@@ -79,36 +59,28 @@ export class PatientService {
         customerStatus: CustomerStatus.LEAD,
         referrerId: dto.referrerId,
         avatarInitials: buildInitials(dto.fullName),
-        assignedDoctors: dto.assignedDoctorIds?.length
-          ? { connect: dto.assignedDoctorIds.map((id) => ({ id })) }
-          : undefined,
-        assignedAssistants: dto.assignedAssistantIds?.length
-          ? { connect: dto.assignedAssistantIds.map((id) => ({ id })) }
-          : undefined,
+        assignedDoctors: {
+          connect: dto.assignedDoctorIds.map((staffId) => ({ id: staffId })),
+        },
+        assignedAssistants: {
+          connect: dto.assignedAssistantIds.map((staffId) => ({ id: staffId })),
+        },
       },
     });
   }
 
   /** Sửa hồ sơ khách hàng, gồm cập nhật lại danh sách bác sĩ / trợ lý phụ trách. */
   async update(id: string, dto: UpdatePatientDto, user: JwtPayloadUser) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id },
-      include: {
-        assignedDoctors: { select: { id: true } },
-        assignedAssistants: { select: { id: true } },
-      },
-    });
-
-    if (!patient) {
-      throw new NotFoundException('Không tìm thấy khách hàng');
-    }
-    if (!canEdit(patient, user)) {
-      throw new ForbiddenException('Bạn không có quyền sửa hồ sơ này');
-    }
+    await assertPatientAccess(this.prisma, user, id, 'edit');
     if (dto.clinicId !== undefined) {
       await assertClinicAccess(this.prisma, user, dto.clinicId);
     }
-    await assertClinicAccess(this.prisma, user, patient.clinicId);
+    if (dto.assignedDoctorIds !== undefined && dto.assignedDoctorIds.length === 0) {
+      throw new BadRequestException('Vui lòng chọn ít nhất một bác sĩ phụ trách');
+    }
+    if (dto.assignedAssistantIds !== undefined && dto.assignedAssistantIds.length === 0) {
+      throw new BadRequestException('Vui lòng chọn ít nhất một trợ lý phụ trách');
+    }
 
     return this.prisma.patient.update({
       where: { id },
@@ -177,6 +149,8 @@ export class PatientService {
   }
 
   async findOne(id: string, user: JwtPayloadUser) {
+    await assertPatientAccess(this.prisma, user, id);
+
     const patient = await this.prisma.patient.findUnique({
       where: { id },
       include: {
@@ -190,11 +164,6 @@ export class PatientService {
       throw new NotFoundException('Không tìm thấy khách hàng');
     }
 
-    if (!canView(patient, user)) {
-      throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
-    }
-    await assertClinicAccess(this.prisma, user, patient.clinicId);
-
     return patient;
   }
   // Lấy chi tiết mỗi lần khám của khách hàng
@@ -202,6 +171,8 @@ export class PatientService {
     patientId: string,
     user: JwtPayloadUser,
   ): Promise<PatientDetailResponse> {
+    await assertPatientAccess(this.prisma, user, patientId);
+
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
       include: patientInclude,
@@ -210,11 +181,6 @@ export class PatientService {
     if (!patient) {
       throw new NotFoundException('Patient not found');
     }
-
-    if (!canView(patient, user)) {
-      throw new ForbiddenException('Bạn không có quyền xem hồ sơ này');
-    }
-    await assertClinicAccess(this.prisma, user, patient.clinicId);
 
     return mapPatientToDetailResponse(patient);
   }

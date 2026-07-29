@@ -23,22 +23,23 @@ import { TreatmentSessionImageResponse } from './mappers/treatment-session.mappe
 export class PatientTreatmentController {
   constructor(private readonly patientTreatmentService: PatientTreatmentService) {}
 
-  /** Lịch sử tất cả buổi — cho tab Điều trị (bảng list) */
   @Get('treatment-sessions')
-  findAllByPatient(@Param('patientId', ParseUUIDPipe) patientId: string) {
-    return this.patientTreatmentService.findAllByPatient(patientId);
+  findAllByPatient(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @CurrentUser() user: JwtPayloadUser,
+  ) {
+    return this.patientTreatmentService.findAllByPatient(patientId, user);
   }
 
-  /** Các buổi của 1 dịch vụ — cho TreatmentAction */
   @Get('services/:serviceId/treatment-sessions')
   findByService(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: JwtPayloadUser,
   ) {
-    return this.patientTreatmentService.findByService(patientId, serviceId);
+    return this.patientTreatmentService.findByService(patientId, serviceId, user);
   }
 
-  /** Lưu / sửa buổi */
   @Post('services/:serviceId/treatment-sessions')
   upsertSession(
     @Param('patientId', ParseUUIDPipe) patientId: string,
@@ -46,10 +47,9 @@ export class PatientTreatmentController {
     @Body() dto: UpsertTreatmentSessionDto,
     @CurrentUser() user: JwtPayloadUser,
   ) {
-    return this.patientTreatmentService.upsertSession(patientId, serviceId, dto, user.id);
+    return this.patientTreatmentService.upsertSession(patientId, serviceId, dto, user);
   }
 
-  /** Tải ảnh lên buổi điều trị */
   @Post('services/:serviceId/treatment-sessions/:sessionNumber/images')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -68,10 +68,10 @@ export class PatientTreatmentController {
       serviceId,
       sessionNumber,
       file,
-      user.id,
+      user,
     );
   }
-  /** Xóa ảnh buổi điều trị */
+
   @Delete('services/:serviceId/treatment-sessions/:sessionNumber/images/:imageId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSessionImage(
@@ -79,12 +79,14 @@ export class PatientTreatmentController {
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
     @Param('sessionNumber', ParseIntPipe) sessionNumber: number,
     @Param('imageId', ParseUUIDPipe) imageId: string,
+    @CurrentUser() user: JwtPayloadUser,
   ): Promise<void> {
     await this.patientTreatmentService.deleteSessionImage(
       patientId,
       serviceId,
       sessionNumber,
       imageId,
+      user,
     );
   }
 }

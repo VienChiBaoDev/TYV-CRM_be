@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '@prisma/client';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
@@ -45,15 +47,15 @@ export class PatientPaymentService {
   async findAllByPatient(
     patientId: string,
     query: QueryPatientPaymentsDto = {},
+    user: JwtPayloadUser,
   ): Promise<PatientPaymentsListResponse> {
+    await assertPatientAccess(this.prisma, user, patientId);
+
     const page = query.page ?? DEFAULT_PAGE;
     const limit = query.limit ?? DEFAULT_LIMIT;
     const skip = (page - 1) * limit;
 
-    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, payments, total, aggregate, refundAggregate] = await Promise.all([
-      this.ensurePatientExists(patientId),
-      /// findMany để lấy danh sách thanh toán của một bệnh nhân
+    const [payments, total, aggregate, refundAggregate] = await Promise.all([
       this.prisma.patientPayment.findMany({
         where: { patientId },
         include: paymentInclude,
@@ -96,9 +98,9 @@ export class PatientPaymentService {
   async create(
     patientId: string,
     dto: CreatePatientPaymentDto,
-    processedById: string,
+    user: JwtPayloadUser,
   ): Promise<PatientPaymentResponse> {
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     return this.prismaTx.$transaction(async (tx) => {
       // serviceIds: danh sách id dịch vụ thanh toán
@@ -153,7 +155,7 @@ export class PatientPaymentService {
           branch: dto.branch.trim(),
           content: dto.content?.trim() || null,
           totalAmount,
-          processedById,
+          processedById: user.id,
           ...(dto.createdAt ? { createdAt: new Date(dto.createdAt) } : {}),
           lines: {
             create: dto.items.map((item) => {
@@ -185,9 +187,9 @@ export class PatientPaymentService {
   async createRefund(
     patientId: string,
     dto: CreatePatientRefundDto,
-    processedById: string,
+    user: JwtPayloadUser,
   ): Promise<PatientPaymentResponse> {
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     return this.prismaTx.$transaction(async (tx) => {
       const serviceIds = dto.items.map((i) => i.patientServiceRecordId);
@@ -240,7 +242,7 @@ export class PatientPaymentService {
           branch: dto.branch.trim(),
           content: content || null,
           totalAmount: -totalAmount, // âm
-          processedById,
+          processedById: user.id,
           ...(dto.createdAt ? { createdAt: new Date(dto.createdAt) } : {}),
           lines: {
             create: dto.items.map((item) => {
@@ -263,7 +265,7 @@ export class PatientPaymentService {
           data: { paidAmount: { decrement: item.amount } },
         });
         if (item.lockService) {
-          await cancelPatientServiceRecord(tx, item.patientServiceRecordId, processedById);
+          await cancelPatientServiceRecord(tx, item.patientServiceRecordId, user.id);
         }
       }
 
@@ -341,15 +343,5 @@ export class PatientPaymentService {
       bankHolderSnapshot: account.accountHolder,
       bankNumberSnapshot: account.accountNumber,
     };
-  }
-
-  private async ensurePatientExists(patientId: string): Promise<void> {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-      select: { id: true },
-    });
-    if (!patient) {
-      throw new NotFoundException('Không tìm thấy bệnh nhân');
-    }
   }
 }

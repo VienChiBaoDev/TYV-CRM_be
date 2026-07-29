@@ -1,5 +1,6 @@
 import { Gender } from '@prisma/client';
 import {
+  ArrayMinSize,
   IsArray,
   IsEnum,
   IsISO8601,
@@ -51,13 +52,13 @@ export class CreatePatientDto {
   @IsUUID()
   referrerId?: string;
 
-  @IsOptional()
   @IsArray()
+  @ArrayMinSize(1, { message: 'Vui lòng chọn ít nhất một bác sĩ phụ trách' })
   @IsUUID('all', { each: true })
-  assignedDoctorIds?: string[];
+  assignedDoctorIds!: string[];
 
-  @IsOptional()
   @IsArray()
+  @ArrayMinSize(1, { message: 'Vui lòng chọn ít nhất một trợ lý phụ trách' })
   @IsUUID('all', { each: true })
-  assignedAssistantIds?: string[];
+  assignedAssistantIds!: string[];
 }
