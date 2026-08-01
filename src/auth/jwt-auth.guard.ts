@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { AUTH_COOKIE_NAME } from './auth-cookie';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
 export interface JwtPayloadUser {
@@ -12,7 +13,7 @@ export interface JwtPayloadUser {
   fullName: string;
 }
 
-/** Guard toàn cục: yêu cầu Bearer token hợp lệ cho mọi route trừ @Public(). */
+/** Guard toàn cục: yêu cầu JWT hợp lệ (HttpOnly cookie) cho mọi route trừ @Public(). */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -55,15 +56,9 @@ export class JwtAuthGuard implements CanActivate {
     return true; /** Nếu token hợp lệ, trả về true. */
   }
 
-  /** Lấy token từ request. */
+  /** Lấy token từ HttpOnly cookie. */
   private extractToken(request: Request): string | undefined {
-    /** Lấy authorization từ request. */
-    const auth = request.headers.authorization;
-    if (!auth) return undefined; /** Nếu không có authorization, trả về undefined. */
-    /** Tách authorization thành type và token. */
-    const [type, token] = auth.split(' ');
-    return type === 'Bearer'
-      ? token
-      : undefined; /** Nếu type không phải Bearer, trả về undefined. */
+    const token = request.cookies?.[AUTH_COOKIE_NAME];
+    return typeof token === 'string' && token.length > 0 ? token : undefined;
   }
 }
