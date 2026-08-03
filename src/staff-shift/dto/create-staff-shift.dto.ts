@@ -1,13 +1,12 @@
 import { StaffShiftType } from '@prisma/client';
-import { ClinicBranch } from '@prisma/client';
 import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateStaffShiftDto {
   @IsUUID()
   staffId!: string;
 
-  @IsEnum(ClinicBranch)
-  clinicBranch!: ClinicBranch;
+  @IsUUID()
+  clinicId!: string;
 
   @IsEnum(StaffShiftType)
   type!: StaffShiftType;

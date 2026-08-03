@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/client';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
@@ -34,28 +36,27 @@ export class PatientServiceService {
     private readonly prismaTx: PrismaTransactionService,
   ) {}
   // Lấy danh sách dịch vụ của bệnh nhân
-  async findAllByPatient(patientId: string): Promise<PatientServiceResponse[]> {
-    // Chạy song song — ensurePatientExists vẫn throw 404 khi cần, không tốn round-trip nối tiếp
-    const [, records] = await Promise.all([
-      this.ensurePatientExists(patientId),
-      this.prisma.patientServiceRecord.findMany({
-        where: { patientId },
-        include: recordInclude,
-        orderBy: { finalizedAt: 'desc' },
-      }),
-    ]);
+  async findAllByPatient(
+    patientId: string,
+    user: JwtPayloadUser,
+  ): Promise<PatientServiceResponse[]> {
+    await assertPatientAccess(this.prisma, user, patientId);
+
+    const records = await this.prisma.patientServiceRecord.findMany({
+      where: { patientId },
+      include: recordInclude,
+      orderBy: { finalizedAt: 'desc' },
+    });
 
     return records.map(mapPatientServiceToResponse);
   }
 
-  // Tạo dịch vụ cho bệnh nhân
   async create(
     patientId: string,
     dto: CreatePatientServiceDto,
-    finalizedById: string,
+    user: JwtPayloadUser,
   ): Promise<PatientServiceResponse> {
-    // Kiểm tra xem bệnh nhân có tồn tại không
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     // Kiểm tra xem dịch vụ có tồn tại và hoạt động không
     const catalog = await this.prisma.catalogService.findUnique({
@@ -71,7 +72,7 @@ export class PatientServiceService {
       await this.ensureStaffExists(dto.telesaleId, 'Telesale');
     }
     // Kiểm tra xem người chốt dịch vụ có tồn tại và hoạt động không
-    await this.ensureStaffExists(finalizedById, 'Người chốt dịch vụ');
+    await this.ensureStaffExists(user.id, 'Người chốt dịch vụ');
 
     // Tính toán tổng tiền
     const subtotal = dto.unitPriceAfterVat * dto.quantity;
@@ -89,7 +90,7 @@ export class PatientServiceService {
         serviceName: catalog.name,
         consultantId: dto.consultantId,
         telesaleId: dto.telesaleId,
-        finalizedById,
+        finalizedById: user.id,
         unitPrice: dto.unitPrice,
         vatPercent: dto.vatPercent,
         vatAmount: dto.vatAmount,
@@ -109,8 +110,12 @@ export class PatientServiceService {
   }
 
   // Xóa dịch vụ của bệnh nhân
-  async delete(patientId: string, serviceId: string): Promise<void> {
-    await this.ensurePatientExists(patientId);
+  async delete(
+    patientId: string,
+    serviceId: string,
+    user: JwtPayloadUser,
+  ): Promise<void> {
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     const service = await this.prisma.patientServiceRecord.findFirst({
       where: { id: serviceId, patientId },
@@ -139,9 +144,9 @@ export class PatientServiceService {
   async cancel(
     patientId: string,
     serviceId: string,
-    cancelledById: string,
+    user: JwtPayloadUser,
   ): Promise<PatientServiceResponse> {
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     const service = await this.prisma.patientServiceRecord.findFirst({
       where: { id: serviceId, patientId },
@@ -154,7 +159,7 @@ export class PatientServiceService {
     }
 
     return this.prismaTx.$transaction(async (tx) => {
-      await cancelPatientServiceRecord(tx, serviceId, cancelledById);
+      await cancelPatientServiceRecord(tx, serviceId, user.id);
       const updated = await tx.patientServiceRecord.findUniqueOrThrow({
         where: { id: serviceId },
         include: recordInclude,
@@ -167,8 +172,9 @@ export class PatientServiceService {
     patientId: string,
     serviceId: string,
     dto: UpdatePatientServiceDto,
+    user: JwtPayloadUser,
   ): Promise<PatientServiceResponse> {
-    await this.ensurePatientExists(patientId);
+    await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
     const existing = await this.prisma.patientServiceRecord.findFirst({
       where: { id: serviceId, patientId },
@@ -254,16 +260,6 @@ export class PatientServiceService {
     });
 
     return mapPatientServiceToResponse(updated);
-  }
-
-  private async ensurePatientExists(patientId: string): Promise<void> {
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: patientId },
-      select: { id: true },
-    });
-    if (!patient) {
-      throw new NotFoundException('Không tìm thấy bệnh nhân');
-    }
   }
 
   private async ensureStaffExists(staffId: string, label: string): Promise<void> {

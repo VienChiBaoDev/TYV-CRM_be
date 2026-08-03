@@ -8,7 +8,6 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ClinicBranch } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { CreatePatientDto } from './dto/create-patient.dto';
@@ -21,18 +20,18 @@ export class PatientController {
   constructor(private readonly patientService: PatientService) {}
 
   @Post()
-  create(@Body() dto: CreatePatientDto) {
-    return this.patientService.create(dto);
+  create(@Body() dto: CreatePatientDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.patientService.create(dto, user);
   }
 
   @Get()
   findAll(
     @CurrentUser() user: JwtPayloadUser,
     @Query('search') search?: string,
-    @Query('branch') branch?: ClinicBranch,
+    @Query('clinicId') clinicId?: string,
     @Query('referrerId') referrerId?: string,
   ) {
-    return this.patientService.findAll({ search, branch, referrerId }, user);
+    return this.patientService.findAll({ search, clinicId, referrerId }, user);
   }
 
   @Get(':id')

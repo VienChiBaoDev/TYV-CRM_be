@@ -1,13 +1,15 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ClinicBranch, StaffRole } from '@prisma/client';
+import { StaffRole } from '@prisma/client';
 
 export class UpdateStaffDto {
   @IsOptional()
@@ -30,8 +32,9 @@ export class UpdateStaffDto {
   role?: StaffRole;
 
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch | null;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  clinicIds?: string[];
 
   @IsOptional()
   @IsBoolean()

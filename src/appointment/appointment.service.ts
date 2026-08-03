@@ -6,13 +6,14 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
-  ClinicBranch,
   Prisma,
   StaffRole,
   VisitMode,
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -25,16 +26,8 @@ import { formatDateOnly } from '../medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 import { BLOCKING_APPOINTMENT_STATUSES } from './appointment-overlap.rules';
 
-// record để mapping branch với location
-const BRANCH_TO_LOCATION: Record<ClinicBranch, string> = {
-  [ClinicBranch.HANG_BONG]: 'Hàng Bông',
-  [ClinicBranch.CAU_GIAY]: 'Cầu Giấy',
-};
-
-const DEFAULT_BRANCH = ClinicBranch.HANG_BONG;
-
 interface FindAppointmentsParams {
-  branch?: ClinicBranch;
+  clinicId?: string;
   status?: AppointmentStatus;
   from?: string;
   to?: string;
@@ -67,18 +60,19 @@ export class AppointmentService {
     private readonly staffShiftService: StaffShiftService,
   ) {}
 
-  async create(dto: CreateAppointmentDto) {
+  async create(dto: CreateAppointmentDto, user: JwtPayloadUser) {
     this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
+    await assertClinicAccess(this.prisma, user, dto.clinicId);
     const startAt = new Date(dto.scheduledAt);
     const endAt = new Date(dto.endedAt);
-    const branch = dto.clinicBranch ?? DEFAULT_BRANCH;
+    const clinicId = dto.clinicId;
 
     await this.assertAssignedStaffAvailable({
       doctorId: dto.doctorId,
       assistantId: dto.assistantId,
       startAt,
       endAt,
-      branch,
+      clinicId,
     });
 
     await this.assertNoSchedulingConflict({
@@ -99,13 +93,14 @@ export class AppointmentService {
         assistantId: assignment.assistantId,
         doctorName: assignment.doctorName,
         assistantName: assignment.assistantName,
-        clinicBranch: branch,
+        clinicId,
         note: dto.note,
       },
     });
   }
 
-  async findAll(params: FindAppointmentsParams) {
+  async findAll(params: FindAppointmentsParams, user: JwtPayloadUser) {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     if (params.doctorId) {
       const doctor = await this.prisma.staff.findUnique({
         where: { id: params.doctorId },
@@ -117,7 +112,7 @@ export class AppointmentService {
     }
 
     const where: Prisma.AppointmentWhereInput = {
-      ...(params.branch ? { clinicBranch: params.branch } : {}),
+      ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.doctorId ? { doctorId: params.doctorId } : {}),
       ...(params.from || params.to
@@ -140,7 +135,7 @@ export class AppointmentService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user?: JwtPayloadUser) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -152,11 +147,14 @@ export class AppointmentService {
     if (!appointment) {
       throw new NotFoundException('Không tìm thấy lịch hẹn');
     }
+    if (user) {
+      await assertClinicAccess(this.prisma, user, appointment.clinicId);
+    }
     return appointment;
   }
 
-  async update(id: string, dto: UpdateAppointmentDto) {
-    const current = await this.findOne(id);
+  async update(id: string, dto: UpdateAppointmentDto, user: JwtPayloadUser) {
+    const current = await this.findOne(id, user);
     if (dto.scheduledAt && dto.endedAt) {
       this.assertValidTimeRange(dto.scheduledAt, dto.endedAt);
     } else if (dto.scheduledAt || dto.endedAt) {
@@ -170,12 +168,15 @@ export class AppointmentService {
     if (dto.visitId !== undefined) {
       throw new BadRequestException('Không thể gán visitId qua cập nhật thường');
     }
+    if (dto.clinicId) {
+      await assertClinicAccess(this.prisma, user, dto.clinicId);
+    }
     // nếu không phải là hủy lịch hẹn, kiểm tra xem có cần kiểm tra ca làm của nhân viên không và kiểm tra xem có lịch hẹn nào trùng khung giờ với lịch hẹn đang xét không.
     const isCancelling = dto.status === AppointmentStatus.CANCELLED;
     if (!isCancelling && this.shouldValidateStaffShift(dto)) {
       const startAt = new Date(dto.scheduledAt ?? current.scheduledAt);
       const endAt = new Date(dto.endedAt ?? current.endedAt);
-      const branch = dto.clinicBranch ?? current.clinicBranch;
+      const clinicId = dto.clinicId ?? current.clinicId;
       const doctorId = await this.resolveDoctorId(
         dto.doctorId,
         dto.doctorName ?? current.doctorName,
@@ -191,7 +192,7 @@ export class AppointmentService {
         assistantId,
         startAt,
         endAt,
-        branch,
+        clinicId,
       });
       await this.assertNoSchedulingConflict({
         doctorId,
@@ -237,7 +238,7 @@ export class AppointmentService {
             ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
             ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
             ...staffAssignmentData,
-            ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+            ...(dto.clinicId ? { clinicId: dto.clinicId } : {}),
             status: AppointmentStatus.CANCELLED,
             ...(dto.note !== undefined ? { note: dto.note } : {}),
           },
@@ -263,7 +264,7 @@ export class AppointmentService {
         ...(dto.scheduledAt ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
         ...(dto.endedAt ? { endedAt: new Date(dto.endedAt) } : {}),
         ...staffAssignmentData,
-        ...(dto.clinicBranch ? { clinicBranch: dto.clinicBranch } : {}),
+        ...(dto.clinicId ? { clinicId: dto.clinicId } : {}),
         ...(dto.status ? { status: dto.status } : {}),
         ...(dto.note !== undefined ? { note: dto.note } : {}),
       },
@@ -275,8 +276,8 @@ export class AppointmentService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: JwtPayloadUser) {
+    await this.findOne(id, user);
     return this.prisma.appointment.delete({ where: { id } });
   }
 
@@ -319,7 +320,7 @@ export class AppointmentService {
       dto.assistantId !== undefined ||
       dto.doctorName !== undefined ||
       dto.assistantName !== undefined ||
-      dto.clinicBranch,
+      dto.clinicId,
     );
   }
   /**
@@ -331,14 +332,14 @@ export class AppointmentService {
     assistantId?: string | null;
     startAt: Date;
     endAt: Date;
-    branch: ClinicBranch;
+    clinicId: string;
   }): Promise<void> {
-    const { doctorId, assistantId, startAt, endAt, branch } = params;
+    const { doctorId, assistantId, startAt, endAt, clinicId } = params;
     await this.staffShiftService.assertStaffAvailableForAppointment({
       staffId: doctorId,
       startAt,
       endAt,
-      branch,
+      clinicId,
       staffLabel: 'Bác sĩ',
     });
     if (assistantId) {
@@ -346,7 +347,7 @@ export class AppointmentService {
         staffId: assistantId,
         startAt,
         endAt,
-        branch,
+        clinicId,
         staffLabel: 'Trợ lý',
       });
     }
@@ -464,18 +465,20 @@ export class AppointmentService {
     return (aggregate._max.visitNumber ?? 0) + 1;
   }
 
-  async checkIn(id: string) {
+  async checkIn(id: string, user: JwtPayloadUser) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
         patient: {
           select: { id: true, fullName: true, patientCode: true, phone: true },
         },
+        clinic: { select: { name: true } },
       },
     });
     if (!appointment) {
       throw new NotFoundException('Không tìm thấy lịch hẹn');
     }
+    await assertClinicAccess(this.prisma, user, appointment.clinicId);
     if (appointment.visitId) {
       throw new ConflictException('Lịch hẹn đã được tiếp nhận');
     }
@@ -494,7 +497,7 @@ export class AppointmentService {
           visitDate: new Date(`${visitDate}T00:00:00.000Z`),
           doctorName: appointment.doctorName ?? 'Chưa phân công',
           mode: VisitMode.IN_PERSON,
-          location: BRANCH_TO_LOCATION[appointment.clinicBranch],
+          location: appointment.clinic.name,
           status: VisitStatus.INITIAL_EXAM,
         },
       });

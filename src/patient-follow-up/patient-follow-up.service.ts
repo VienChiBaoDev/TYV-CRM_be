@@ -13,7 +13,7 @@ import {
   mapToScheduleItem,
   startOfTodayUtc,
 } from './mappers/follow-up.mapper';
-import { ClinicBranch, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PrismaTransactionService } from 'src/prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
@@ -28,10 +28,15 @@ import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
 import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 import { AppointmentService } from 'src/appointment/appointment.service';
+import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { assertClinicAccess } from '../auth/clinic-access';
 
 const followUpInclude = {
   patient: {
     select: { id: true, fullName: true, patientCode: true },
+  },
+  clinic: {
+    select: { id: true, name: true },
   },
 } satisfies Prisma.PatientFollowUpInclude;
 
@@ -45,13 +50,16 @@ export class PatientFollowUpService {
   ) {}
 
   /** Bảng 1: Sắp đến hạn tái khám trong N ngày tới */
-  async findUpcoming(params: {
-    branch?: ClinicBranch;
-    daysAhead?: number;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
-    const branch = params.branch ?? ClinicBranch.HANG_BONG;
+  async findUpcoming(
+    params: {
+      clinicId?: string;
+      daysAhead?: number;
+      page?: number;
+      limit?: number;
+    },
+    user: JwtPayloadUser,
+  ): Promise<PaginatedResponse<FollowUpScheduleItemResponse>> {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     // N ngày tới
     const daysAhead = params.daysAhead ?? DEFAULT_DAYS_AHEAD;
     const page = params.page ?? DEFAULT_PAGE;
@@ -100,7 +108,7 @@ export class PatientFollowUpService {
           },
         ],
         /** Tại cơ sở */
-        ...(branch ? { facility: branch } : {}),
+        ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       },
       include: followUpInclude,
       orderBy: {
@@ -117,11 +125,15 @@ export class PatientFollowUpService {
     };
   }
   /** Bảng 2: Hỏi thăm — đến hạn assessmentDate, cùng quy tắc ẩn/hiện với findUpcoming */
-  async findPendingAssessments(params: {
-    branch?: ClinicBranch;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
+  async findPendingAssessments(
+    params: {
+      clinicId?: string;
+      page?: number;
+      limit?: number;
+    },
+    user: JwtPayloadUser,
+  ): Promise<PaginatedResponse<PendingAssessmentItemResponse>> {
+    await assertClinicAccess(this.prisma, user, params.clinicId);
     const page = params.page ?? DEFAULT_PAGE;
     const limit = params.limit ?? DEFAULT_LIMIT;
     const today = startOfTodayUtc();
@@ -162,7 +174,7 @@ export class PatientFollowUpService {
           },
         ],
         /** Tại cơ sở */
-        ...(params.branch ? { facility: params.branch } : {}),
+        ...(params.clinicId ? { clinicId: params.clinicId } : {}),
       },
       include: followUpInclude,
       orderBy: {
@@ -201,7 +213,7 @@ export class PatientFollowUpService {
       staffId: body.doctorId,
       startAt: scheduledAt,
       endAt: endedAt,
-      branch: followUp.facility,
+      clinicId: followUp.clinicId,
       staffLabel: 'Bác sĩ',
     });
 
@@ -210,7 +222,7 @@ export class PatientFollowUpService {
         staffId: body.assistantId,
         startAt: scheduledAt,
         endAt: endedAt,
-        branch: followUp.facility,
+        clinicId: followUp.clinicId,
         staffLabel: 'Trợ lý',
       });
     }
@@ -243,7 +255,7 @@ export class PatientFollowUpService {
           assistantId: body.assistantId ?? null,
           doctorName: doctor?.fullName ?? body.doctorName ?? followUp.physicianInCharge,
           assistantName: assistant?.fullName ?? body.assistantName ?? null,
-          clinicBranch: followUp.facility,
+          clinicId: followUp.clinicId,
           note: body.note,
         },
       });

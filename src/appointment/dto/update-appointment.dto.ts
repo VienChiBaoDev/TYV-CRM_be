@@ -1,4 +1,4 @@
-import { AppointmentStatus, ClinicBranch } from '@prisma/client';
+import { AppointmentStatus } from '@prisma/client';
 import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateAppointmentDto {
@@ -29,8 +29,8 @@ export class UpdateAppointmentDto {
   assistantName?: string;
 
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch;
+  @IsUUID()
+  clinicId?: string;
 
   @IsOptional()
   @IsEnum(AppointmentStatus)

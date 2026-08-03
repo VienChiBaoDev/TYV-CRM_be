@@ -1,5 +1,4 @@
 import {
-  ClinicBranch,
   ClinicalImageCategory,
   CustomerStatus,
   MedicalVisit,
@@ -17,15 +16,6 @@ export const TREATMENT_STATUS_TO_CUSTOMER_STATUS = {
 } as const satisfies Record<string, CustomerStatus>;
 
 export type TreatmentStatusApi = keyof typeof TREATMENT_STATUS_TO_CUSTOMER_STATUS;
-
-const LOCATION_TO_CLINIC_BRANCH: Record<string, ClinicBranch> = {
-  HANG_BONG: ClinicBranch.HANG_BONG,
-  'Hàng Bông': ClinicBranch.HANG_BONG,
-  'Hang Bong': ClinicBranch.HANG_BONG,
-  CAU_GIAY: ClinicBranch.CAU_GIAY,
-  'Cầu Giấy': ClinicBranch.CAU_GIAY,
-  'Cau Giay': ClinicBranch.CAU_GIAY,
-};
 
 export function parseDateOnly(isoDate: string): Date {
   const [year, month, day] = isoDate.split('-').map(Number);
@@ -51,10 +41,6 @@ export function computeReminderDaysBefore(
 ): number {
   const diffMs = followUpDate.getTime() - assessmentDate.getTime();
   return Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
-}
-
-export function resolveClinicBranchFromLocation(location: string): ClinicBranch {
-  return LOCATION_TO_CLINIC_BRANCH[location] ?? ClinicBranch.HANG_BONG;
 }
 
 export function mapVisitHerbToResponse(herb: VisitHerb): VisitHerbResponse {
@@ -104,7 +90,8 @@ export interface FollowUpPlanResponse {
   readonly assessmentDate: string;
   readonly reminderDaysBefore: number;
   readonly physicianInCharge: string;
-  readonly facility: ClinicBranch;
+  readonly clinicId: string;
+  readonly clinicName: string | null;
   readonly scheduleStatus: PatientFollowUp['scheduleStatus'];
   readonly assessmentResult: PatientFollowUp['assessmentResult'];
   readonly assessmentNote: string | null;
@@ -142,11 +129,13 @@ export interface MedicalVisitResponse {
 type VisitWithRelations = MedicalVisit & {
   herbs: VisitHerb[];
   clinicalImages: VisitClinicalImage[];
-  followUpsOriginated: PatientFollowUp[];
+  followUpsOriginated: (PatientFollowUp & {
+    clinic?: { id: string; name: string } | null;
+  })[];
 };
 
 export function mapFollowUpToResponse(
-  followUp: PatientFollowUp,
+  followUp: PatientFollowUp & { clinic?: { id: string; name: string } | null },
 ): FollowUpPlanResponse {
   return {
     id: followUp.id,
@@ -157,7 +146,8 @@ export function mapFollowUpToResponse(
       followUp.assessmentDate,
     ),
     physicianInCharge: followUp.physicianInCharge,
-    facility: followUp.facility,
+    clinicId: followUp.clinicId,
+    clinicName: followUp.clinic?.name ?? null,
     scheduleStatus: followUp.scheduleStatus,
     assessmentResult: followUp.assessmentResult,
     assessmentNote: followUp.assessmentNote,

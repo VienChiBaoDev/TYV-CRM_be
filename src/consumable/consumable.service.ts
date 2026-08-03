@@ -1,13 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
+import { buildPaginatedMeta } from 'src/common/pagination/paginate';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
-import { UpdateConsumableDto } from './dto/update-consumable.dto';
-import { QueryConsumableDto } from './dto/query-consumable.dto';
-import { StockInDto } from './dto/stock-in.dto';
-import { StockAdjustDto } from './dto/stock-adjust.dto';
 import { QueryConsumableUsageDto } from './dto/query-consumable-usage.dto';
-import { mapConsumableToOption, mapConsumableToResponse } from './mappers/consumable.mapper';
+import { QueryConsumableDto } from './dto/query-consumable.dto';
+import { StockAdjustDto } from './dto/stock-adjust.dto';
+import { StockInDto } from './dto/stock-in.dto';
+import { UpdateConsumableDto } from './dto/update-consumable.dto';
+import {
+  ConsumableUsageResponse,
+  mapConsumableToOption,
+  mapConsumableToResponse,
+} from './mappers/consumable.mapper';
 
 /**
  * Order by cho danh sách vật tư tiêu hao
@@ -144,52 +151,102 @@ export class ConsumableService {
   /**
    * Lấy báo cáo tiêu hao
    */
-  async findUsage(query: QueryConsumableUsageDto) {
-    /**
-     * Xây dựng where cho query báo cáo tiêu hao
-     */
-    const where: Prisma.TreatmentSessionConsumableWhereInput = {};
+  async findUsage(
+    query: QueryConsumableUsageDto,
+  ): Promise<PaginatedResponse<ConsumableUsageResponse>> {
+    const page = query.page ?? DEFAULT_PAGE;
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const skip = (page - 1) * limit;
 
-    if (query.consumableId) where.consumableId = query.consumableId;
+    const and: Prisma.TreatmentSessionConsumableWhereInput[] = [];
 
-    if (query.from || query.to) {
-      where.createdAt = {};
-      if (query.from) where.createdAt.gte = new Date(query.from);
-      if (query.to) where.createdAt.lte = new Date(query.to);
+    if (query.consumableId) {
+      and.push({ consumableId: query.consumableId });
     }
 
-    const rows = await this.prisma.treatmentSessionConsumable.findMany({
-      where,
-      include: {
-        // Lấy thông tin lần điều trị
-        session: {
-          include: {
-            patientServiceRecord: {
-              include: {
-                patient: { select: { fullName: true, patientCode: true } },
+    if (query.from || query.to) {
+      const performedAt: Prisma.DateTimeFilter = {};
+      if (query.from) performedAt.gte = new Date(query.from);
+      if (query.to) performedAt.lte = new Date(query.to);
+      and.push({ session: { performedAt } });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      and.push({
+        OR: [
+          { nameSnapshot: { contains: search, mode: 'insensitive' } },
+          {
+            session: {
+              patientServiceRecord: {
+                patient: { fullName: { contains: search, mode: 'insensitive' } },
               },
             },
-            // Lấy thông tin nhân viên thực hiện
-            performedBy: { select: { fullName: true } },
+          },
+          {
+            session: {
+              patientServiceRecord: {
+                patient: { patientCode: { contains: search, mode: 'insensitive' } },
+              },
+            },
+          },
+          {
+            session: {
+              patientServiceRecord: {
+                serviceName: { contains: search, mode: 'insensitive' },
+              },
+            },
+          },
+          {
+            session: {
+              performedBy: { fullName: { contains: search, mode: 'insensitive' } },
+            },
+          },
+        ],
+      });
+    }
+
+    const where: Prisma.TreatmentSessionConsumableWhereInput =
+      and.length > 0 ? { AND: and } : {};
+
+    const [rows, total] = await Promise.all([
+      // Lấy danh sách tiêu hao
+      this.prisma.treatmentSessionConsumable.findMany({
+        where,
+        include: {
+          session: {
+            include: {
+              patientServiceRecord: {
+                include: {
+                  patient: { select: { fullName: true, patientCode: true } },
+                },
+              },
+              performedBy: { select: { fullName: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      // Lấy tối đa 500 bản ghi
-      take: 500,
-    });
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      // Lấy tổng số lượng tiêu hao
+      this.prisma.treatmentSessionConsumable.count({ where }),
+    ]);
 
-    return rows.map((row) => ({
-      id: row.id,
-      consumableName: row.nameSnapshot,
-      unit: row.unitSnapshot,
-      quantity: Number(row.quantity),
-      performedAt: row.session.performedAt.toISOString(),
-      patientName: row.session.patientServiceRecord.patient.fullName,
-      patientCode: row.session.patientServiceRecord.patient.patientCode,
-      serviceName: row.session.patientServiceRecord.serviceName,
-      sessionNumber: row.session.sessionNumber,
-      performedByName: row.session.performedBy?.fullName ?? null,
-    }));
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        consumableName: row.nameSnapshot,
+        unit: row.unitSnapshot,
+        quantity: Number(row.quantity),
+        performedAt: row.session.performedAt.toISOString(),
+        patientName: row.session.patientServiceRecord.patient.fullName,
+        patientCode: row.session.patientServiceRecord.patient.patientCode,
+        serviceName: row.session.patientServiceRecord.serviceName,
+        sessionNumber: row.session.sessionNumber,
+        performedByName: row.session.performedBy?.fullName ?? null,
+      })),
+      meta: buildPaginatedMeta(page, limit, total),
+    };
   }
 }

@@ -1,13 +1,15 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ClinicBranch, StaffRole } from '@prisma/client';
+import { StaffRole } from '@prisma/client';
 
 export class CreateStaffDto {
   @IsEmail({}, { message: 'Email không hợp lệ' })
@@ -25,8 +27,9 @@ export class CreateStaffDto {
   role!: StaffRole;
 
   @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch | null;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  clinicIds?: string[];
 
   @IsOptional()
   @IsBoolean()

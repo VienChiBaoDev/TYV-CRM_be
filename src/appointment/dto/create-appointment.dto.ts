@@ -1,4 +1,4 @@
-import { ClinicBranch } from '@prisma/client';
+import { AppointmentStatus } from '@prisma/client';
 import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateAppointmentDto {
@@ -13,6 +13,7 @@ export class CreateAppointmentDto {
 
   @IsUUID()
   doctorId!: string;
+
   @IsOptional()
   @IsUUID()
   assistantId?: string;
@@ -27,9 +28,8 @@ export class CreateAppointmentDto {
   @MaxLength(255)
   assistantName?: string;
 
-  @IsOptional()
-  @IsEnum(ClinicBranch)
-  clinicBranch?: ClinicBranch;
+  @IsUUID()
+  clinicId!: string;
 
   @IsOptional()
   @IsString()
