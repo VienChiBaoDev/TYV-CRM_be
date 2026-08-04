@@ -39,7 +39,7 @@ Vào **Settings → Secrets and variables → Actions → Secrets**:
 | Secret | Bắt buộc | Lấy ở đâu |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Supabase → Project Settings → Database → Connection string (**Transaction pooler**, port 6543). Nhớ URL-encode ký tự đặc biệt trong password (vd `@` → `%40`) |
-| `DIRECT_URL` | ⬜ | Connection string **Direct** (port 5432). Không set thì tự derive từ `DATABASE_URL` |
+| `DIRECT_URL` | ⬜ | Connection string **Session pooler** (host `...pooler.supabase.com`, port 5432). Không set thì tự derive từ `DATABASE_URL`. **Không dùng** host `db.<ref>.supabase.co` — host này chỉ có IPv6, GitHub Actions không kết nối được (lỗi `ENETUNREACH`) |
 | `DOCKERHUB_USERNAME` | ✅ | Username Docker Hub |
 | `DOCKERHUB_TOKEN` | ✅ | Docker Hub → Account Settings → Personal access tokens (quyền Read & Write) |
 | `RAILWAY_TOKEN` | ✅ | Railway → Project → Settings → Tokens (**project token**, gắn với environment production) |
