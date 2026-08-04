@@ -1,0 +1,144 @@
+/**
+ * Chỉ baseline khi DB đã có schema nhưng `_prisma_migrations` trống hoàn toàn
+ * (trường hợp sync bằng `prisma db push` trước đó).
+ *
+ * Nếu đã có lịch sử migration → KHÔNG mark migration mới; để `migrate deploy` chạy SQL.
+ *
+ * Usage: node scripts/ensure-migration-baseline.js
+ */
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const { Client } = require('pg');
+
+const MIGRATIONS_DIR = path.resolve(__dirname, '../prisma/migrations');
+// Bảng sentinel — tồn tại nghĩa là DB đã có schema
+const SENTINEL_TABLE = 'staff';
+
+function loadEnv(file) {
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!m || process.env[m[1]]) continue;
+    process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+}
+
+loadEnv(path.resolve(__dirname, '../.env'));
+
+function listMigrations() {
+  return fs
+    .readdirSync(MIGRATIONS_DIR)
+    .filter((d) => fs.existsSync(path.join(MIGRATIONS_DIR, d, 'migration.sql')))
+    .sort();
+}
+
+function deriveDirectUrl(databaseUrl) {
+  try {
+    const x = new URL(databaseUrl);
+    // Supabase pooler (6543) → direct (5432)
+    if (x.port === '6543') x.port = '5432';
+    x.searchParams.delete('pgbouncer');
+    x.searchParams.delete('connection_limit');
+    return x.toString();
+  } catch {
+    return databaseUrl;
+  }
+}
+
+(async () => {
+  if (!process.env.DATABASE_URL) {
+    console.error('Missing DATABASE_URL');
+    process.exit(1);
+  }
+  if (!process.env.DIRECT_URL) {
+    process.env.DIRECT_URL = deriveDirectUrl(process.env.DATABASE_URL);
+  }
+
+  const url = process.env.DIRECT_URL;
+  const c = new Client({
+    connectionString: url,
+    ssl: url.includes('localhost') || url.includes('127.0.0.1') ? undefined : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 30_000,
+  });
+  await c.connect();
+  await c.query('SET default_transaction_read_only = off');
+  await c.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE');
+
+  const sentinel = await c.query(`SELECT to_regclass('public.${SENTINEL_TABLE}') AS t`);
+  const hasSchema = Boolean(sentinel.rows[0]?.t);
+
+  await c.query(`
+    CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
+      "id" VARCHAR(36) PRIMARY KEY,
+      "checksum" VARCHAR(64) NOT NULL,
+      "finished_at" TIMESTAMPTZ,
+      "migration_name" VARCHAR(255) NOT NULL,
+      "logs" TEXT,
+      "rolled_back_at" TIMESTAMPTZ,
+      "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "applied_steps_count" INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  // Xóa bản ghi migration fail để resolve/deploy lại được
+  const failed = await c.query(
+    `SELECT migration_name FROM "_prisma_migrations"
+     WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL`,
+  );
+  for (const row of failed.rows) {
+    console.log(`Removing failed/incomplete record: ${row.migration_name}`);
+    await c.query(`DELETE FROM "_prisma_migrations" WHERE migration_name = $1`, [
+      row.migration_name,
+    ]);
+  }
+
+  const applied = await c.query(
+    `SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL`,
+  );
+  const appliedSet = new Set(applied.rows.map((r) => r.migration_name));
+  const migrations = listMigrations();
+  const missing = migrations.filter((m) => !appliedSet.has(m));
+
+  if (missing.length === 0) {
+    console.log('Migration history OK — không cần baseline.');
+    await c.end();
+    return;
+  }
+
+  // Đã có lịch sử → migration còn thiếu là migration MỚI, phải chạy SQL qua migrate deploy
+  if (appliedSet.size > 0) {
+    console.log(
+      `Đã có ${appliedSet.size} migration applied, ${missing.length} pending → bỏ qua baseline (để migrate deploy chạy SQL).`,
+    );
+    await c.end();
+    return;
+  }
+
+  if (!hasSchema) {
+    console.log(
+      `DB trống (chưa có ${SENTINEL_TABLE}) — bỏ qua baseline, để migrate deploy tạo schema (${missing.length} pending).`,
+    );
+    await c.end();
+    return;
+  }
+
+  console.log(
+    `DB đã có schema + lịch sử migration trống → mark ${missing.length} migration cũ (không chạy SQL).`,
+  );
+  await c.end();
+
+  for (const name of missing) {
+    console.log(`  resolve --applied ${name}`);
+    execFileSync('npx', ['prisma', 'migrate', 'resolve', '--applied', name], {
+      stdio: 'inherit',
+      env: process.env,
+      cwd: path.resolve(__dirname, '..'),
+    });
+  }
+
+  console.log('✅ baseline xong — migrate deploy chỉ chạy migration mới về sau.');
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

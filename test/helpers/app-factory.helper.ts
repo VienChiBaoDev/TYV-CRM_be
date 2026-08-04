@@ -53,7 +53,6 @@ export async function createTestApp(): Promise<AppTestContext> {
 
   const app = moduleFixture.createNestApplication();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   app.use(cookieParser());
   await app.init();
 

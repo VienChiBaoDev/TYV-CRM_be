@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { ValidationPipe } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
-import cookieParser = require('cookie-parser');
-import compression = require('compression');
+import cookieParser from 'cookie-parser';
+import compression from 'compression';
 
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';

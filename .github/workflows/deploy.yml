@@ -1,0 +1,143 @@
+name: Deploy Railway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_migrate:
+        description: 'Bỏ qua bước migrate (chỉ build & deploy)'
+        required: false
+        default: false
+        type: boolean
+      skip_docker_push:
+        description: 'Chỉ redeploy Railway (không build/push Docker)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: deploy-railway-production
+  cancel-in-progress: false
+
+env:
+  IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/tyv-crm-be:latest
+
+jobs:
+  migrate:
+    name: Prisma migrate deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall chạy prisma generate — cần URL giả để validate schema
+      - name: Install deps
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+          DIRECT_URL: postgresql://user:pass@localhost:5432/ci
+        run: npm ci
+
+      - name: Migrate deploy
+        if: github.event.inputs.skip_migrate != 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Optional — nếu không có thì derive từ DATABASE_URL (pooler 6543 → direct 5432)
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Thiếu GitHub secret DATABASE_URL"
+            exit 1
+          fi
+          if [ -z "$DIRECT_URL" ]; then
+            export DIRECT_URL="$(node -e '
+              const u = process.env.DATABASE_URL;
+              try {
+                const x = new URL(u);
+                if (x.port === "6543") x.port = "5432";
+                x.searchParams.delete("pgbouncer");
+                x.searchParams.delete("connection_limit");
+                process.stdout.write(x.toString());
+              } catch {
+                process.stdout.write(u);
+              }
+            ')"
+            echo "DIRECT_URL không có secret — dùng bản derive từ DATABASE_URL"
+          fi
+          # DB đã có bảng nhưng chưa có lịch sử migration → chỉ đánh dấu, không chạy lại SQL
+          node scripts/ensure-migration-baseline.js
+          npx prisma migrate deploy
+
+  build-and-push:
+    name: Build & Push Docker Hub
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [migrate]
+    if: |
+      always() &&
+      needs.migrate.result == 'success' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_docker_push != 'true'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  redeploy:
+    name: Redeploy Railway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [migrate, build-and-push]
+    if: |
+      always() &&
+      needs.migrate.result == 'success' &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Redeploy service
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::error::Thiếu secret RAILWAY_TOKEN"
+            exit 1
+          fi
+          if [ -z "$RAILWAY_SERVICE" ]; then
+            echo "::error::Thiếu secret RAILWAY_SERVICE (tên hoặc ID service trên Railway)"
+            exit 1
+          fi
+          echo "Redeploy → $RAILWAY_SERVICE"
+          railway redeploy --service "$RAILWAY_SERVICE" --yes
