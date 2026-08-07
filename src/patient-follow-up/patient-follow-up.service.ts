@@ -15,7 +15,6 @@ import {
 } from './mappers/follow-up.mapper';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PrismaTransactionService } from 'src/prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from 'src/prisma/prisma-transaction.options';
 import { DEFAULT_DAYS_AHEAD } from 'src/common/common';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
@@ -44,7 +43,6 @@ const followUpInclude = {
 export class PatientFollowUpService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
     private readonly staffShiftService: StaffShiftService,
     private readonly appointmentService: AppointmentService,
   ) {}
@@ -245,7 +243,7 @@ export class PatientFollowUpService {
       endAt: endedAt,
     });
 
-    const updated = await this.prismaTx.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const appointment = await tx.appointment.create({
         data: {
           patientId: followUp.patientId,

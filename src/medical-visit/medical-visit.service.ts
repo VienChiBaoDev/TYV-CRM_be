@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CreateMedicalVisitDto, VisitHerbDto } from './dto/create-medical-visit.dto';
@@ -54,7 +53,6 @@ const visitInclude = {
 export class MedicalVisitService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
     private readonly supabaseStorage: SupabaseStorageService,
   ) {}
 
@@ -90,7 +88,7 @@ export class MedicalVisitService {
   ): Promise<MedicalVisitResponse> {
     await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
-    const visit = await this.prismaTx.$transaction(async (tx) => {
+    const visit = await this.prisma.$transaction(async (tx) => {
       // Lấy số thứ tự của lần khám mới nhất theo id khách hàng
       const visitNumber = await this.getNextVisitNumber(tx, patientId);
       // Xây dựng dữ liệu lần khám mới
@@ -133,7 +131,7 @@ export class MedicalVisitService {
     // Lấy lần khám cũ
     const existing = await this.getVisitOrThrow(patientId, visitId);
 
-    const visit = await this.prismaTx.$transaction(async (tx) => {
+    const visit = await this.prisma.$transaction(async (tx) => {
       if (dto.visit) {
         // Cập nhật lần khám cũ
         await tx.medicalVisit.update({
@@ -202,7 +200,7 @@ export class MedicalVisitService {
     await assertPatientAccess(this.prisma, user, patientId, 'edit');
     await this.getVisitOrThrow(patientId, visitId);
 
-    await this.prismaTx.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       await tx.medicalVisit.delete({ where: { id: visitId } });
       await this.syncPatientNextFollowUpDate(tx, patientId);
     }, PRISMA_TRANSACTION_OPTIONS);

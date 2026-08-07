@@ -12,12 +12,15 @@ import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { JwtPayloadUser } from 'src/auth/jwt-auth.guard';
+import { PERMISSIONS } from 'src/auth/permissions';
+import { RequirePermissions } from 'src/auth/permissions.decorator';
 
 @Controller('follow-ups')
 export class PatientFollowUpController {
   constructor(private readonly patientFollowUpService: PatientFollowUpService) {}
 
   @Get('upcoming')
+  @RequirePermissions(PERMISSIONS.FOLLOWUPS_WRITE)
   findUpcoming(
     @Query() query: QueryUpcomingFollowUpsDto,
     @CurrentUser() user: JwtPayloadUser,
@@ -34,6 +37,7 @@ export class PatientFollowUpController {
   }
 
   @Get('pending-assessment')
+  @RequirePermissions(PERMISSIONS.FOLLOWUPS_WRITE)
   findPendingAssessments(
     @Query() query: QueryPendingAssessmentsDto,
     @CurrentUser() user: JwtPayloadUser,
@@ -49,6 +53,7 @@ export class PatientFollowUpController {
   }
 
   @Patch(':id/schedule')
+  @RequirePermissions(PERMISSIONS.FOLLOWUPS_WRITE)
   scheduleFollowUp(
     @Param('id') id: string,
     @Body() body: ScheduleFollowUpDto,
@@ -57,6 +62,7 @@ export class PatientFollowUpController {
   }
 
   @Patch(':id/assessment')
+  @RequirePermissions(PERMISSIONS.FOLLOWUPS_WRITE)
   submitAssessment(
     @Param('id') id: string,
     @Body() body: SubmitAssessmentDto,
@@ -65,6 +71,7 @@ export class PatientFollowUpController {
   }
 
   @Patch(':id/reschedule')
+  @RequirePermissions(PERMISSIONS.FOLLOWUPS_WRITE)
   rescheduleFollowUp(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RescheduleFollowUpDto,

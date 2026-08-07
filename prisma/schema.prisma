@@ -44,9 +44,21 @@ model Staff {
   assistantAppointments Appointment[] @relation("AppointmentAssistant")
 
   prescriptionFormulaTemplates PrescriptionFormulaTemplate[]
+  permissions                  StaffPermission[]
 
   @@index([role])
   @@map("staff")
+}
+
+/// Snapshot quyền theo nhân viên (copy từ role defaults, có thể chỉnh tay).
+model StaffPermission {
+  staffId        String @map("staff_id") @db.Uuid
+  permissionCode String @map("permission_code") @db.VarChar(64)
+  staff          Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, permissionCode])
+  @@index([permissionCode])
+  @@map("staff_permissions")
 }
 
 /// Gán nhân viên vào một hoặc nhiều cơ sở. ADMIN không có row — truy cập mọi cơ sở.

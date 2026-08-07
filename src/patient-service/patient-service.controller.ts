@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import { PatientServiceResponse } from './mappers/patient-service.mapper';
 import { PatientServiceService } from './patient-service.service';
@@ -22,6 +24,7 @@ export class PatientServiceController {
   constructor(private readonly patientServiceService: PatientServiceService) {}
 
   @Get()
+  @RequirePermissions(PERMISSIONS.SERVICES_READ)
   findAll(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: JwtPayloadUser,
@@ -30,6 +33,7 @@ export class PatientServiceController {
   }
 
   @Post()
+  @RequirePermissions(PERMISSIONS.SERVICES_WRITE)
   create(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Body() dto: CreatePatientServiceDto,
@@ -40,6 +44,7 @@ export class PatientServiceController {
 
   @Delete(':serviceId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.SERVICES_WRITE)
   delete(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
@@ -49,6 +54,7 @@ export class PatientServiceController {
   }
 
   @Patch(':serviceId/cancel')
+  @RequirePermissions(PERMISSIONS.SERVICES_WRITE)
   cancel(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
@@ -58,6 +64,7 @@ export class PatientServiceController {
   }
 
   @Patch(':serviceId')
+  @RequirePermissions(PERMISSIONS.SERVICES_WRITE)
   update(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,

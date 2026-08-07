@@ -14,7 +14,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertClinicAccess } from '../auth/clinic-access';
-import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -56,7 +55,6 @@ interface AssertNoSchedulingConflictParams {
 export class AppointmentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
     private readonly staffShiftService: StaffShiftService,
   ) {}
 
@@ -231,7 +229,7 @@ export class AppointmentService {
         : {};
 
     if (isCancelling) {
-      return this.prismaTx.$transaction(async (tx) => {
+      return this.prisma.$transaction(async (tx) => {
         const updated = await tx.appointment.update({
           where: { id },
           data: {
@@ -485,7 +483,7 @@ export class AppointmentService {
     if (!CHECK_IN_ALLOWED_STATUSES.includes(appointment.status)) {
       throw new BadRequestException('Chỉ có thể tiếp nhận lịch ở trạng thái Đã đặt hoặc Xác nhận');
     }
-    return this.prismaTx.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const visitNumber = await this.getNextVisitNumber(tx, appointment.patientId);
       const visitDate = formatDateOnly(appointment.scheduledAt);
 

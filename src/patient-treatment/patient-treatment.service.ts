@@ -3,7 +3,6 @@ import { PatientServiceStatus, Prisma } from '@prisma/client';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
@@ -46,7 +45,6 @@ const sessionInclude = {
 export class PatientTreatmentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
     private readonly supabaseStorage: SupabaseStorageService,
   ) {}
 
@@ -151,7 +149,7 @@ export class PatientTreatmentService {
 
     const now = new Date();
 
-    return this.prismaTx.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const existing = await tx.patientTreatmentSession.findUnique({
         where: {
           patientServiceRecordId_sessionNumber: {

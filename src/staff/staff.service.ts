@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma, StaffRole } from '@prisma/client';
 import { hash } from 'bcryptjs';
+import { PermissionsService } from '../auth/permissions.service';
+import type { PermissionCode } from '../auth/permissions';
+import { getRoleDefaultPermissions } from '../auth/permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 
@@ -19,6 +23,7 @@ const staffSelect = {
   createdAt: true,
   updatedAt: true,
   clinicLinks: { select: { clinicId: true } },
+  permissions: { select: { permissionCode: true } },
 } satisfies Prisma.StaffSelect;
 
 type StaffRow = Prisma.StaffGetPayload<{ select: typeof staffSelect }>;
@@ -29,16 +34,18 @@ export interface StaffResponse {
   fullName: string;
   role: StaffRole;
   clinicIds: string[];
+  permissionCodes: PermissionCode[];
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 function mapStaffResponse(staff: StaffRow): StaffResponse {
-  const { clinicLinks, ...rest } = staff;
+  const { clinicLinks, permissions, ...rest } = staff;
   return {
     ...rest,
     clinicIds: clinicLinks.map((link) => link.clinicId),
+    permissionCodes: permissions.map((row) => row.permissionCode as PermissionCode),
   };
 }
 
@@ -51,14 +58,25 @@ function assertClinicIdsForRole(role: StaffRole, clinicIds: string[] | undefined
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   async findAll(): Promise<StaffResponse[]> {
     const rows = await this.prisma.staff.findMany({
       select: staffSelect,
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map(mapStaffResponse);
+
+    return rows.map((row) => {
+      const response = mapStaffResponse(row);
+      if (response.permissionCodes.length > 0) return response;
+      return {
+        ...response,
+        permissionCodes: getRoleDefaultPermissions(row.role),
+      };
+    });
   }
 
   /** Danh sách nhân sự active cho dropdown — không trả email. */
@@ -83,17 +101,22 @@ export class StaffService {
     const email = dto.email.toLowerCase().trim();
     await this.ensureEmailAvailable(email);
     assertClinicIdsForRole(dto.role, dto.clinicIds);
+    const permissionCodes = this.permissionsService.resolveIncomingCodes(
+      dto.role,
+      dto.permissionCodes,
+    );
+    const passwordHash = await hash(dto.password, 10);
 
     const staff = await this.prisma.$transaction(async (tx) => {
       const created = await tx.staff.create({
         data: {
           email,
-          passwordHash: await hash(dto.password, 10),
+          passwordHash,
           fullName: dto.fullName,
           role: dto.role,
           isActive: dto.isActive ?? true,
         },
-        select: staffSelect,
+        select: { id: true },
       });
 
       if (dto.role !== StaffRole.ADMIN && dto.clinicIds?.length) {
@@ -105,12 +128,15 @@ export class StaffService {
         });
       }
 
+      await this.permissionsService.replaceForStaff(tx, created.id, permissionCodes);
+
       return tx.staff.findUniqueOrThrow({
         where: { id: created.id },
         select: staffSelect,
       });
-    });
+    }, PRISMA_TRANSACTION_OPTIONS);
 
+    this.permissionsService.clearStaffCache(staff.id);
     return mapStaffResponse(staff);
   }
 
@@ -128,13 +154,14 @@ export class StaffService {
     if (email) {
       await this.ensureEmailAvailable(email, id);
     }
+    const passwordHash = dto.password ? await hash(dto.password, 10) : undefined;
 
     const staff = await this.prisma.$transaction(async (tx) => {
       await tx.staff.update({
         where: { id },
         data: {
           ...(email ? { email } : {}),
-          ...(dto.password ? { passwordHash: await hash(dto.password, 10) } : {}),
+          ...(passwordHash ? { passwordHash } : {}),
           ...(dto.fullName !== undefined ? { fullName: dto.fullName } : {}),
           ...(dto.role !== undefined ? { role: dto.role } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
@@ -150,9 +177,27 @@ export class StaffService {
         }
       }
 
-      return tx.staff.findUniqueOrThrow({ where: { id }, select: staffSelect });
-    });
+      if (dto.permissionCodes !== undefined) {
+        await this.permissionsService.replaceForStaff(
+          tx,
+          id,
+          this.permissionsService.resolveIncomingCodes(nextRole, dto.permissionCodes),
+        );
+      } else if (dto.role !== undefined) {
+        // Role đổi mà không gửi checklist → áp mặc định role mới.
+        await this.permissionsService.replaceForStaff(
+          tx,
+          id,
+          this.permissionsService.resolveIncomingCodes(nextRole, undefined),
+        );
+      }
 
+      return tx.staff.findUniqueOrThrow({ where: { id }, select: staffSelect });
+    }, PRISMA_TRANSACTION_OPTIONS);
+
+    if (dto.permissionCodes !== undefined || dto.role !== undefined) {
+      this.permissionsService.clearStaffCache(id);
+    }
     return mapStaffResponse(staff);
   }
 

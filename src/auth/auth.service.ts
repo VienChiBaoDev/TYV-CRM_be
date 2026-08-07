@@ -4,6 +4,8 @@ import { Staff, StaffRole } from '@prisma/client';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import type { PermissionCode } from './permissions';
+import { PermissionsService } from './permissions.service';
 
 export interface AuthUser {
   id: string;
@@ -12,6 +14,7 @@ export interface AuthUser {
   role: Staff['role'];
   clinicIds: string[];
   allClinics: boolean;
+  permissions: PermissionCode[];
 }
 
 @Injectable()
@@ -19,6 +22,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   async login(dto: LoginDto): Promise<{ accessToken: string; user: AuthUser }> {
@@ -36,12 +40,7 @@ export class AuthService {
     }
 
     const user = await this.toAuthUser(staff);
-    const accessToken = await this.jwt.signAsync({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.fullName,
-    });
+    const accessToken = await this.issueAccessToken(user);
 
     return { accessToken, user };
   }
@@ -54,6 +53,21 @@ export class AuthService {
     return this.toAuthUser(staff);
   }
 
+  issueAccessToken(user: AuthUser): Promise<string> {
+    return this.jwt.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      fullName: user.fullName,
+      permissions: user.permissions,
+    });
+  }
+
+  /**
+   * Chuyển đổi nhân viên thành đối tượng AuthUser
+   * @param staff là nhân viên
+   * @returns là một đối tượng AuthUser
+   */
   private async toAuthUser(staff: Staff): Promise<AuthUser> {
     const allClinics = staff.role === StaffRole.ADMIN;
     const clinicIds = allClinics
@@ -65,6 +79,8 @@ export class AuthService {
           })
         ).map((row) => row.clinicId);
 
+    const permissions = await this.permissionsService.getForStaff(staff.id, staff.role);
+
     return {
       id: staff.id,
       email: staff.email,
@@ -72,6 +88,7 @@ export class AuthService {
       role: staff.role,
       clinicIds,
       allClinics,
+      permissions,
     };
   }
 }

@@ -5,12 +5,14 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { AUTH_COOKIE_NAME } from './auth-cookie';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import type { PermissionCode } from './permissions';
 
 export interface JwtPayloadUser {
   id: string;
   email: string;
   role: string;
   fullName: string;
+  permissions?: PermissionCode[];
 }
 
 /** Guard toàn cục: yêu cầu JWT hợp lệ (HttpOnly cookie) cho mọi route trừ @Public(). */
@@ -48,6 +50,7 @@ export class JwtAuthGuard implements CanActivate {
         email: payload.email,
         role: payload.role,
         fullName: payload.fullName,
+        permissions: payload.permissions,
       };
     } catch {
       /** Nếu token không hợp lệ, throw exception. */

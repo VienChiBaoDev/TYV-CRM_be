@@ -3,7 +3,6 @@ import { PaymentMethod, Prisma } from '@prisma/client';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientPaymentDto, PATIENT_PAYMENT_METHOD } from './dto/create-patient-payment.dto';
 import {
@@ -38,10 +37,7 @@ type BankAccountSnapshot = Pick<
 // dịch vụ thanh toán
 @Injectable()
 export class PatientPaymentService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // tìm tất cả thanh toán của một bệnh nhân
   async findAllByPatient(
@@ -102,7 +98,7 @@ export class PatientPaymentService {
   ): Promise<PatientPaymentResponse> {
     await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
-    return this.prismaTx.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       // serviceIds: danh sách id dịch vụ thanh toán
       const serviceIds = dto.items.map((item) => item.patientServiceRecordId);
       // services: danh sách dịch vụ thanh toán
@@ -191,7 +187,7 @@ export class PatientPaymentService {
   ): Promise<PatientPaymentResponse> {
     await assertPatientAccess(this.prisma, user, patientId, 'edit');
 
-    return this.prismaTx.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const serviceIds = dto.items.map((i) => i.patientServiceRecordId);
       // kết quả trả ra: serviceIds = [serviceId1, serviceId2, serviceId3]
       const services = await tx.patientServiceRecord.findMany({

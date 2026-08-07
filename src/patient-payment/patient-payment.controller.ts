@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreatePatientPaymentDto } from './dto/create-patient-payment.dto';
 import {
   PatientPaymentResponse,
@@ -17,6 +19,7 @@ export class PatientPaymentController {
 
   // tìm tất cả thanh toán của một bệnh nhân
   @Get()
+  @RequirePermissions(PERMISSIONS.PAYMENTS_READ)
   findAll(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Query() query: QueryPatientPaymentsDto,
@@ -27,6 +30,7 @@ export class PatientPaymentController {
 
   // tạo thanh toán mới
   @Post()
+  @RequirePermissions(PERMISSIONS.PAYMENTS_WRITE)
   create(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Body() dto: CreatePatientPaymentDto,
@@ -38,6 +42,7 @@ export class PatientPaymentController {
 
   // tạo hoàn trả thanh toán
   @Post('refunds')
+  @RequirePermissions(PERMISSIONS.PAYMENTS_WRITE)
   createRefund(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Body() dto: CreatePatientRefundDto,
