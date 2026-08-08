@@ -8,42 +8,44 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { StaffRole } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { StaffService } from './staff.service';
 
-/** Quản lý tài khoản nhân sự — chỉ ADMIN được phép. */
-@Roles(StaffRole.ADMIN)
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
+  /** Dropdown — mọi user đã login (JWT). */
   @Get('options')
-  @Roles(StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.ASSISTANT, StaffRole.STAFF)
   findOptions() {
     return this.staffService.findActiveOptions();
   }
 
   @Get()
+  @RequirePermissions(PERMISSIONS.SETTINGS_STAFF)
   findAll() {
     return this.staffService.findAll();
   }
 
   @Post()
+  @RequirePermissions(PERMISSIONS.SETTINGS_STAFF)
   create(@Body() dto: CreateStaffDto) {
     return this.staffService.create(dto);
   }
 
   @Patch(':id')
+  @RequirePermissions(PERMISSIONS.SETTINGS_STAFF)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStaffDto) {
     return this.staffService.update(id, dto);
   }
 
   @Delete(':id')
+  @RequirePermissions(PERMISSIONS.SETTINGS_STAFF)
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayloadUser,

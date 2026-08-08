@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
 import { PatientTreatmentService } from './patient-treatment.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -24,6 +26,7 @@ export class PatientTreatmentController {
   constructor(private readonly patientTreatmentService: PatientTreatmentService) {}
 
   @Get('treatment-sessions')
+  @RequirePermissions(PERMISSIONS.TREATMENT_WRITE)
   findAllByPatient(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: JwtPayloadUser,
@@ -32,6 +35,7 @@ export class PatientTreatmentController {
   }
 
   @Get('services/:serviceId/treatment-sessions')
+  @RequirePermissions(PERMISSIONS.TREATMENT_WRITE)
   findByService(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
@@ -41,6 +45,7 @@ export class PatientTreatmentController {
   }
 
   @Post('services/:serviceId/treatment-sessions')
+  @RequirePermissions(PERMISSIONS.TREATMENT_WRITE)
   upsertSession(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
@@ -56,6 +61,7 @@ export class PatientTreatmentController {
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
+  @RequirePermissions(PERMISSIONS.TREATMENT_WRITE)
   uploadSessionImage(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,
@@ -74,6 +80,7 @@ export class PatientTreatmentController {
 
   @Delete('services/:serviceId/treatment-sessions/:sessionNumber/images/:imageId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.TREATMENT_WRITE)
   async deleteSessionImage(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('serviceId', ParseUUIDPipe) serviceId: string,

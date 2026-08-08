@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
@@ -20,11 +22,13 @@ export class PatientController {
   constructor(private readonly patientService: PatientService) {}
 
   @Post()
+  @RequirePermissions(PERMISSIONS.PATIENTS_WRITE)
   create(@Body() dto: CreatePatientDto, @CurrentUser() user: JwtPayloadUser) {
     return this.patientService.create(dto, user);
   }
 
   @Get()
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findAll(
     @CurrentUser() user: JwtPayloadUser,
     @Query('search') search?: string,
@@ -35,6 +39,7 @@ export class PatientController {
   }
 
   @Get(':id')
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayloadUser,
@@ -43,6 +48,7 @@ export class PatientController {
   }
 
   @Patch(':id')
+  @RequirePermissions(PERMISSIONS.PATIENTS_WRITE)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePatientDto,
@@ -53,6 +59,7 @@ export class PatientController {
 
   // Chi tiết mỗi lần khám của khách hàng
   @Get(':patientId/medical-record')
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findMedicalRecord(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: JwtPayloadUser,

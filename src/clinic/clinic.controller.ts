@@ -8,38 +8,38 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { StaffRole } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { ClinicService } from '../clinic/clinic.service';
 import { CreateClinicDto } from './dto/create-clinic.dto';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
 
-/** Quản lý cơ sở / chi nhánh — chỉ ADMIN được thêm/sửa/xóa. */
-@Roles(StaffRole.ADMIN)
 @Controller('clinics')
 export class ClinicController {
   constructor(private readonly clinicService: ClinicService) {}
 
-  /** Mọi nhân viên đọc danh sách đang bật để chọn trên UI. */
+  /** Dropdown cơ sở — JWT only. */
   @Get('options')
-  @Roles(StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.ASSISTANT, StaffRole.STAFF)
   findOptions(@CurrentUser() user: JwtPayloadUser) {
     return this.clinicService.findActiveOptionsForUser(user.id);
   }
 
   @Get()
+  @RequirePermissions(PERMISSIONS.SETTINGS_CLINICS)
   findAll() {
     return this.clinicService.findAll();
   }
 
   @Post()
+  @RequirePermissions(PERMISSIONS.SETTINGS_CLINICS)
   create(@Body() dto: CreateClinicDto) {
     return this.clinicService.create(dto);
   }
 
   @Patch(':id')
+  @RequirePermissions(PERMISSIONS.SETTINGS_CLINICS)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClinicDto,
@@ -48,6 +48,7 @@ export class ClinicController {
   }
 
   @Delete(':id')
+  @RequirePermissions(PERMISSIONS.SETTINGS_CLINICS)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.clinicService.remove(id);
   }

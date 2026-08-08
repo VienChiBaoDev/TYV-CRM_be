@@ -28,7 +28,10 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@CurrentUser() user: JwtPayloadUser) {
-    return this.authService.me(user.id);
+  async me(@CurrentUser() user: JwtPayloadUser, @Res({ passthrough: true }) res: Response) {
+    const authUser = await this.authService.me(user.id);
+    const accessToken = await this.authService.issueAccessToken(authUser);
+    res.cookie(AUTH_COOKIE_NAME, accessToken, authCookieOptions());
+    return authUser;
   }
 }

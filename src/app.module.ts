@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { BankAccountModule } from './bank-account/bank-account.module';
 import { ClinicModule } from './clinic/clinic.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { PermissionsGuard } from './auth/permissions.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { MedicalCaseModule } from './medical-case/medical-case.module';
 import { MedicalVisitModule } from './medical-visit/medical-visit.module';
@@ -32,17 +33,20 @@ import { ConsumableModule } from './consumable/consumable.module';
 
 @Module({
   imports: [
+    // ConfigModule để đọc các biến môi trường từ file .env
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: join(__dirname, '..', '.env'),
     }),
     ScheduleModule.forRoot(),
+    // Ứng dụng sẽ bị tắt nếu vượt quá 200 request trong 1 phút
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
         limit: 200,
       },
     ]),
+    // CacheModule để lưu trữ dữ liệu trong bộ nhớ cache
     CacheModule.register({
       isGlobal: true,
       ttl: 5 * 1000, // 5 seconds
@@ -72,9 +76,10 @@ import { ConsumableModule } from './consumable/consumable.module';
   controllers: [AppController],
   providers: [
     AppService,
-    // Xác thực JWT toàn cục (trừ route gắn @Public), sau đó kiểm tra @Roles.
+    // JWT → Roles (legacy @Roles) → Permissions (@RequirePermissions)
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
 })
 export class AppModule {}

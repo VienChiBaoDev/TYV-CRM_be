@@ -3,7 +3,6 @@ import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/clie
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
 import { assertPatientAccess } from '../auth/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaTransactionService } from '../prisma/prisma-transaction.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import {
@@ -31,10 +30,7 @@ const recordInclude = {
 
 @Injectable()
 export class PatientServiceService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly prismaTx: PrismaTransactionService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
   // Lấy danh sách dịch vụ của bệnh nhân
   async findAllByPatient(
     patientId: string,
@@ -158,7 +154,7 @@ export class PatientServiceService {
       throw new BadRequestException('Dịch vụ đã được hủy');
     }
 
-    return this.prismaTx.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await cancelPatientServiceRecord(tx, serviceId, user.id);
       const updated = await tx.patientServiceRecord.findUniqueOrThrow({
         where: { id: serviceId },

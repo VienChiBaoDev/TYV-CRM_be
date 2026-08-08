@@ -15,6 +15,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { UploadClinicalImageDto } from './dto/upload-clinical-image.dto';
@@ -29,6 +31,7 @@ export class MedicalVisitController {
   constructor(private readonly medicalVisitService: MedicalVisitService) {}
 
   @Get()
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findAll(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: JwtPayloadUser,
@@ -37,6 +40,7 @@ export class MedicalVisitController {
   }
 
   @Get(':visitId')
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findOne(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('visitId', ParseUUIDPipe) visitId: string,
@@ -46,6 +50,7 @@ export class MedicalVisitController {
   }
 
   @Post()
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   create(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Body() dto: CreateMedicalVisitDto,
@@ -55,6 +60,7 @@ export class MedicalVisitController {
   }
 
   @Patch(':visitId')
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   update(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('visitId', ParseUUIDPipe) visitId: string,
@@ -70,6 +76,7 @@ export class MedicalVisitController {
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   uploadClinicalImage(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('visitId', ParseUUIDPipe) visitId: string,
@@ -88,6 +95,7 @@ export class MedicalVisitController {
 
   @Delete(':visitId/clinical-images/:imageId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   async deleteClinicalImage(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('visitId', ParseUUIDPipe) visitId: string,
@@ -104,6 +112,7 @@ export class MedicalVisitController {
 
   @Delete(':visitId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   async remove(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Param('visitId', ParseUUIDPipe) visitId: string,

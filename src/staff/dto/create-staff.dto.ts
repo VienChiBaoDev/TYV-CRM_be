@@ -34,4 +34,10 @@ export class CreateStaffDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** Snapshot quyền; omit = dùng mặc định theo role. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissionCodes?: string[];
 }

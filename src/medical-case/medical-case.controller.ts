@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { UpsertMedicalCaseDto } from './dto/upsert-medical-case.dto';
 import {
   MedicalCaseResponse,
@@ -19,6 +21,7 @@ export class MedicalCaseController {
   constructor(private readonly medicalCaseService: MedicalCaseService) {}
 
   @Get()
+  @RequirePermissions(PERMISSIONS.PATIENTS_READ)
   findByPatient(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: JwtPayloadUser,
@@ -27,6 +30,7 @@ export class MedicalCaseController {
   }
 
   @Put()
+  @RequirePermissions(PERMISSIONS.VISITS_WRITE)
   upsert(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @Body() dto: UpsertMedicalCaseDto,

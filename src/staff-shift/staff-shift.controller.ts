@@ -9,36 +9,39 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { StaffRole } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
+import { PERMISSIONS } from '../auth/permissions';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
 import { UpdateStaffShiftDto } from './dto/update-staff-shift.dto';
 import { StaffShiftService } from './staff-shift.service';
 
-@Roles(StaffRole.ADMIN)
 @Controller('staff-shifts')
 export class StaffShiftController {
   constructor(private readonly staffShiftService: StaffShiftService) {}
 
   @Get()
+  @RequirePermissions(PERMISSIONS.SHIFTS_READ)
   findAll(@Query() query: QueryStaffShiftDto, @CurrentUser() user: JwtPayloadUser) {
     return this.staffShiftService.findAll(query, user);
   }
 
   @Get(':id')
+  @RequirePermissions(PERMISSIONS.SHIFTS_READ)
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayloadUser) {
     return this.staffShiftService.findOne(id, user);
   }
 
   @Post()
+  @RequirePermissions(PERMISSIONS.SHIFTS_WRITE)
   create(@Body() dto: CreateStaffShiftDto, @CurrentUser() user: JwtPayloadUser) {
     return this.staffShiftService.create(dto, user);
   }
 
   @Patch(':id')
+  @RequirePermissions(PERMISSIONS.SHIFTS_WRITE)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffShiftDto,
@@ -48,6 +51,7 @@ export class StaffShiftController {
   }
 
   @Delete(':id')
+  @RequirePermissions(PERMISSIONS.SHIFTS_WRITE)
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayloadUser) {
     return this.staffShiftService.remove(id, user);
   }
