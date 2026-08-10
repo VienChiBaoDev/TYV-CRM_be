@@ -12,6 +12,8 @@ import {
   MedicineResponse,
   normalizeCategory,
 } from './mappers/medicine.mapper';
+import { ImportMedicinesDto } from './dto/import-medicines.dto';
+import type { ImportMedicinesResponse } from './mappers/medicine.mapper';
 
 @Injectable()
 export class MedicineService {
@@ -105,5 +107,75 @@ export class MedicineService {
     });
 
     return mapMedicineToResponse(updated);
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.findOne(id);
+    await this.prisma.medicine.delete({ where: { id } });
+  }
+
+  async importMany(dto: ImportMedicinesDto): Promise<ImportMedicinesResponse> {
+    let created = 0;
+    let skipped = 0;
+
+    const errors: ImportMedicinesResponse['errors'] = [];
+    const seenInBatch = new Set<string>();
+
+    for (let i = 0; i < dto.items.length; i++) {
+      const row = i + 1;
+      const item = dto.items[i];
+      const name = item.name.trim();
+      const unit = item.unit.trim();
+      const unitPrice = item.unitPrice;
+
+      const batchKey = `${name.toLowerCase()}|${unit.toLowerCase()}|${unitPrice}`;
+      // check nếu đã tồn tại trong file
+      if (seenInBatch.has(batchKey)) {
+        skipped++;
+        errors.push({
+          row,
+          message: `Trùng tên + đơn vị trong file: "${name}" (${unit}) (${unitPrice})`,
+        });
+        // skip dòng này và tiếp tục dòng tiếp theo
+        continue;
+      }
+      // add vào set để kiểm tra dòng tiếp theo
+      seenInBatch.add(batchKey);
+
+      const existing = await this.prisma.medicine.findFirst({
+        where: {
+          name,
+          unit,
+          unitPrice,
+        },
+      });
+
+      if (existing) {
+        skipped++;
+        errors.push({
+          row,
+          message: `Không lưu dòng này vì đã tồn tại trong kho thuốc "${name}" (${unit}) (${unitPrice})`,
+        });
+        continue;
+      }
+
+      try {
+        await this.prisma.medicine.create({
+          data: {
+            name,
+            unit,
+            unitPrice,
+            category: normalizeCategory(item.category),
+          },
+        });
+        created++;
+      } catch {
+        errors.push({
+          row,
+          message: `Không thể lưu dòng ${row}`,
+        });
+      }
+    }
+    return { created, skipped, errors };
   }
 }
