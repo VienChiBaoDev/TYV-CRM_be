@@ -22,3 +22,11 @@ export function normalizeCategory(category?: string): string | null {
   const trimmed = category?.trim();
   return trimmed ? trimmed : null;
 }
+export interface ImportMedicinesResponse {
+  readonly created: number;
+  readonly skipped: number;
+  readonly errors: Array<{
+    readonly row: number;
+    readonly message: string;
+  }>;
+}
