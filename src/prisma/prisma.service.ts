@@ -6,6 +6,7 @@ import { connectPrismaWithRetry } from './prisma-connect.util';
 /**
  * Shared client for regular queries and interactive transactions.
  * DATABASE_URL must use Supabase session pooler (:5432).
+ * Model delegates (staff, refreshToken, …) come from generated Prisma Client.
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

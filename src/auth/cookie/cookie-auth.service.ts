@@ -1,59 +1,92 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
 import type { CookieOptions, Response } from 'express';
-import { AUTH_COOKIE_MAX_AGE_MS, AUTH_COOKIE_NAME } from './cookie.constants';
+import {
+  AUTH_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+} from './cookie.constants';
 
 /**
- * Cookie auth theo pattern CRM SPĐ:
- * - Same-site (Vite/Vercel proxy → BE): SameSite=Lax — Safari ổn.
- * - Cross-site (Vercel ↔ Railway trực tiếp): SameSite=None; Secure; Partitioned (CHIPS) — Safari ITP.
+ * Cookie auth theo CRM SPĐ:
+ * - access: HttpOnly + SameSite=Lax
+ * - refresh: HttpOnly + path /api/auth
+ * - csrf: readable, double-submit header
+ * Không trả token trong JSON.
  */
 @Injectable()
 export class CookieAuthService {
   constructor(private readonly config: ConfigService) {}
 
-  setAuthCookie(res: Response, accessToken: string): void {
-    res.cookie(AUTH_COOKIE_NAME, accessToken, this.cookieOptions());
-  }
+  setAuthCookies(
+    res: Response,
+    tokens: { accessToken: string; refreshToken: string },
+  ): void {
+    const secure = this.isSecure();
+    const accessMaxAge = this.parseDurationMs(
+      this.config.get<string>('JWT_ACCESS_EXPIRES') ?? '15m',
+    );
+    const refreshMaxAge = this.parseDurationMs(
+      this.config.get<string>('JWT_REFRESH_EXPIRES') ?? '7d',
+    );
+    const csrf = randomBytes(32).toString('hex');
 
-  clearAuthCookie(res: Response): void {
-    const { maxAge: _maxAge, ...options } = this.cookieOptions();
-    res.clearCookie(AUTH_COOKIE_NAME, options);
-  }
+    res.cookie(AUTH_COOKIE_NAME, tokens.accessToken, {
+      ...this.baseOptions(secure),
+      maxAge: accessMaxAge,
+    });
 
-  private cookieOptions(): CookieOptions {
-    const production = this.config.get<string>('NODE_ENV') === 'production';
-    const secure = this.envBool('COOKIE_SECURE', production);
-    const sameSite = this.envSameSite(production ? 'none' : 'lax');
+    res.cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, {
+      ...this.baseOptions(secure),
+      maxAge: refreshMaxAge,
+      path: REFRESH_COOKIE_PATH,
+    });
 
-    // SameSite=None bắt buộc Secure; thêm Partitioned để Safari không chặn cross-site cookie.
-    const effectiveSecure = sameSite === 'none' ? true : secure;
-
-    const options: CookieOptions = {
-      httpOnly: true,
-      secure: effectiveSecure,
-      sameSite,
+    res.cookie(CSRF_COOKIE_NAME, csrf, {
+      httpOnly: false,
+      secure,
+      sameSite: 'lax',
       path: '/',
-      maxAge: AUTH_COOKIE_MAX_AGE_MS,
+      maxAge: refreshMaxAge,
+    });
+  }
+
+  clearAuthCookies(res: Response): void {
+    const secure = this.isSecure();
+    res.clearCookie(AUTH_COOKIE_NAME, { path: '/', sameSite: 'lax', secure });
+    res.clearCookie(REFRESH_COOKIE_NAME, {
+      path: REFRESH_COOKIE_PATH,
+      sameSite: 'lax',
+      secure,
+    });
+    res.clearCookie(CSRF_COOKIE_NAME, { path: '/', sameSite: 'lax', secure });
+  }
+
+  private baseOptions(secure: boolean): CookieOptions {
+    return {
+      httpOnly: true,
+      secure,
+      sameSite: 'lax',
+      path: '/',
     };
-
-    if (sameSite === 'none') {
-      // Express CookieOptions chưa luôn có `partitioned` trong type — cast an toàn.
-      (options as CookieOptions & { partitioned?: boolean }).partitioned = true;
-    }
-
-    return options;
   }
 
-  private envBool(name: string, fallback: boolean): boolean {
-    const value = this.config.get<string>(name);
-    if (value === undefined) return fallback;
-    return value === 'true' || value === '1';
+  private isSecure(): boolean {
+    const value = this.config.get<string>('COOKIE_SECURE');
+    if (value !== undefined) return value === 'true' || value === '1';
+    return this.config.get<string>('NODE_ENV') === 'production';
   }
 
-  private envSameSite(fallback: 'lax' | 'strict' | 'none'): 'lax' | 'strict' | 'none' {
-    const value = this.config.get<string>('COOKIE_SAME_SITE')?.toLowerCase();
-    if (value === 'lax' || value === 'strict' || value === 'none') return value;
-    return fallback;
+  private parseDurationMs(value: string): number {
+    const v = value.trim().toLowerCase();
+    const m = /^(\d+)([smhd])$/.exec(v);
+    if (!m) return 15 * 60 * 1000;
+    const n = Number(m[1]);
+    const unit = m[2];
+    const mult =
+      unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000;
+    return n * mult;
   }
 }

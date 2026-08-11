@@ -45,9 +45,25 @@ model Staff {
 
   prescriptionFormulaTemplates PrescriptionFormulaTemplate[]
   permissions                  StaffPermission[]
+  refreshTokens                RefreshToken[]
 
   @@index([role])
   @@map("staff")
+}
+
+/// Refresh token — chỉ lưu SHA-256 hash, raw token nằm HttpOnly cookie.
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  staffId   String    @map("staff_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("refresh_tokens")
 }
 
 /// Snapshot quyền theo nhân viên (copy từ role defaults, có thể chỉnh tay).

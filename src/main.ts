@@ -62,6 +62,7 @@ async function bootstrap() {
       return callback(new Error(`Origin khong duoc phep boi CORS: ${origin}`), false);
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'Authorization'],
   });
 
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3003);
