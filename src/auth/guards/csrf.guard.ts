@@ -25,10 +25,10 @@ export class CsrfGuard implements CanActivate {
     }
 
     const path = req.path || '';
-    if (path.endsWith('/auth/login')) {
+    // Login chưa có CSRF; logout chỉ cần clear cookie — CSRF fail không nên chặn đăng xuất.
+    if (path.endsWith('/auth/login') || path.endsWith('/auth/logout')) {
       return true;
     }
-    // refresh dùng cookie refresh + CSRF; login đã bỏ qua ở trên.
 
     const cookieToken = req.cookies?.[CSRF_COOKIE_NAME] as string | undefined;
     const headerToken = headerValue(req, CSRF_HEADER);
