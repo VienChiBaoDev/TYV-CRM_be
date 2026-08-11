@@ -1,8 +1,8 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { StaffRole } from '@prisma/client';
-import type { JwtPayloadUser } from './jwt-auth.guard';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { assertClinicAccess } from './clinic-access';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayloadUser } from '../types';
 
 /** Dữ liệu tối thiểu sau khi pass guard — service có thể dùng clinicId nếu cần. */
 export interface PatientAccessRecord {

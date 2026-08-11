@@ -12,8 +12,8 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertClinicAccess } from '../auth/clinic-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertClinicAccess } from '../auth/access/clinic-access';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CatalogServiceStatus, PatientServiceStatus, Prisma } from '@prisma/client';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertPatientAccess } from '../auth/patient-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertPatientAccess } from '../auth/access/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';

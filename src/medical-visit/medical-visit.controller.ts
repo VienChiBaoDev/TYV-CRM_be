@@ -13,10 +13,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { CreateMedicalVisitDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { UploadClinicalImageDto } from './dto/upload-clinical-image.dto';

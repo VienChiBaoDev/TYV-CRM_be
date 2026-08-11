@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerStatus, Prisma } from '@prisma/client';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertClinicAccess } from '../auth/clinic-access';
-import { assertPatientAccess } from '../auth/patient-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertClinicAccess } from '../auth/access/clinic-access';
+import { assertPatientAccess } from '../auth/access/patient-access';
 import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';

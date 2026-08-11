@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { ConsumableService } from './consumable.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
 import { UpdateConsumableDto } from './dto/update-consumable.dto';
