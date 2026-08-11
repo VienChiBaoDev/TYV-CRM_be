@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Prisma, StaffShiftType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertClinicAccess } from '../auth/clinic-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertClinicAccess } from '../auth/access/clinic-access';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
 import { UpdateStaffShiftDto } from './dto/update-staff-shift.dto';

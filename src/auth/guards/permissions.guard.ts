@@ -1,10 +1,10 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { StaffRole } from '@prisma/client';
-import type { JwtPayloadUser } from './jwt-auth.guard';
-import { PERMISSIONS_KEY } from './permissions.decorator';
-import type { PermissionCode } from './permissions';
-import { PermissionsService } from './permissions.service';
+import { PERMISSIONS_KEY } from '../decorators';
+import type { PermissionCode } from '../permissions';
+import { PermissionsService } from '../permissions.service';
+import type { JwtPayloadUser } from '../types';
 
 /** Global guard: only enforces when route has @RequirePermissions(...). */
 @Injectable()

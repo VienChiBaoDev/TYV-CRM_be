@@ -10,10 +10,10 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { CurrentUser } from 'src/auth/current-user.decorator';
-import type { JwtPayloadUser } from 'src/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/auth/decorators';
+import type { JwtPayloadUser } from 'src/auth/types';
 import { PERMISSIONS } from 'src/auth/permissions';
-import { RequirePermissions } from 'src/auth/permissions.decorator';
+import { RequirePermissions } from 'src/auth/decorators';
 import { CreatePrescriptionFormulaTemplateDto } from './dto/create-prescription-formula-template.dto';
 import { UpdatePrescriptionFormulaTemplateDto } from './dto/update-prescription-formula-template.dto';
 import { PrescriptionFormulaTemplateService } from './prescription-formula-template.service';

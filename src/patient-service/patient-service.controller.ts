@@ -10,10 +10,10 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { CreatePatientServiceDto } from './dto/create-patient-service.dto';
 import { PatientServiceResponse } from './mappers/patient-service.mapper';
 import { PatientServiceService } from './patient-service.service';

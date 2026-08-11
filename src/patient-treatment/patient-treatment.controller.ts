@@ -12,10 +12,10 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
 import { PatientTreatmentService } from './patient-treatment.service';
 import { FileInterceptor } from '@nestjs/platform-express';

@@ -4,18 +4,10 @@ import { Staff, StaffRole } from '@prisma/client';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
-import type { PermissionCode } from './permissions';
 import { PermissionsService } from './permissions.service';
+import type { AuthUser } from './types';
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  fullName: string;
-  role: Staff['role'];
-  clinicIds: string[];
-  allClinics: boolean;
-  permissions: PermissionCode[];
-}
+export type { AuthUser } from './types';
 
 @Injectable()
 export class AuthService {
@@ -63,11 +55,6 @@ export class AuthService {
     });
   }
 
-  /**
-   * Chuyển đổi nhân viên thành đối tượng AuthUser
-   * @param staff là nhân viên
-   * @returns là một đối tượng AuthUser
-   */
   private async toAuthUser(staff: Staff): Promise<AuthUser> {
     const allClinics = staff.role === StaffRole.ADMIN;
     const clinicIds = allClinics

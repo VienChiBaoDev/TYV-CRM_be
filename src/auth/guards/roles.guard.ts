@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { StaffRole } from '@prisma/client';
-import type { JwtPayloadUser } from './jwt-auth.guard';
-import { ROLES_KEY } from './roles.decorator';
+import { ROLES_KEY } from '../decorators';
+import type { JwtPayloadUser } from '../types';
 
 /** Guard toàn cục: chỉ chặn khi route có gắn @Roles(...). */
 @Injectable()
@@ -21,9 +21,7 @@ export class RolesGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const { user } = context
-      .switchToHttp()
-      .getRequest<{ user?: JwtPayloadUser }>();
+    const { user } = context.switchToHttp().getRequest<{ user?: JwtPayloadUser }>();
     if (!user || !required.includes(user.role as StaffRole)) {
       throw new ForbiddenException('Bạn không có quyền truy cập');
     }

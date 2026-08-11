@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertPatientAccess } from '../auth/patient-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertPatientAccess } from '../auth/access/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface MedicalCaseResponse {

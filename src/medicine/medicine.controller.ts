@@ -12,7 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { CreateMedicineDto } from './dto/create-medicine.dto';
 import { QueryMedicineDto } from './dto/query-medicine.dto';
 import { UpdateMedicineDto } from './dto/update-medicine.dto';

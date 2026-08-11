@@ -27,8 +27,8 @@ import { getEffectiveFollowUpDate } from './mappers/follow-up.mapper';
 import { parseDateOnly } from 'src/medical-visit/mappers/visit.mapper';
 import { StaffShiftService } from 'src/staff-shift/staff-shift.service';
 import { AppointmentService } from 'src/appointment/appointment.service';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertClinicAccess } from '../auth/clinic-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertClinicAccess } from '../auth/access/clinic-access';
 
 const followUpInclude = {
   patient: {

@@ -10,10 +10,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { AppointmentStatus } from '@prisma/client';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';

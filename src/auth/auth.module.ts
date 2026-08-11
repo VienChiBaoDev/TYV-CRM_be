@@ -4,6 +4,7 @@ import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { CookieAuthService } from './cookie/cookie-auth.service';
 import { PermissionsService } from './permissions.service';
 
 @Module({
@@ -21,7 +22,7 @@ import { PermissionsService } from './permissions.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PermissionsService],
-  exports: [JwtModule, PermissionsService],
+  providers: [AuthService, CookieAuthService, PermissionsService],
+  exports: [JwtModule, PermissionsService, CookieAuthService],
 })
 export class AuthModule {}

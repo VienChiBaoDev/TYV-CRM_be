@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { CatalogServiceService } from './catalog-service.service';
 import { QueryCatalogServiceDto } from './dto/query-catalog-service.dto';
 import { CreateCatalogServiceDto } from './dto/create-catalog-service.dto';

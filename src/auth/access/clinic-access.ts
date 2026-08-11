@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { StaffRole } from '@prisma/client';
-import type { JwtPayloadUser } from './jwt-auth.guard';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayloadUser } from '../types';
+import type { PrismaService } from '../../prisma/prisma.service';
 
 /** ADMIN = null (không giới hạn). Non-admin = danh sách clinicId được gán. */
 export async function resolveAllowedClinicIds(

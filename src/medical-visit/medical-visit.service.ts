@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ClinicalImageCategory, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
-import { assertPatientAccess } from '../auth/patient-access';
+import type { JwtPayloadUser } from '../auth/types';
+import { assertPatientAccess } from '../auth/access/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';

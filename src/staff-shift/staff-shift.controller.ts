@@ -9,10 +9,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators';
 import { CreateStaffShiftDto } from './dto/create-staff-shift.dto';
 import { QueryStaffShiftDto } from './dto/query-staff-shift.dto';
 import { UpdateStaffShiftDto } from './dto/update-staff-shift.dto';

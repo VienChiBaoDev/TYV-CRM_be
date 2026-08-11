@@ -10,10 +10,10 @@ import type { PaginatedResponse } from 'src/common/interfaces/paginated-response
 import { ScheduleFollowUpDto } from './dto/schedule-follow-up.dto';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 import { RescheduleFollowUpDto } from './dto/reschedule-follow-up.dto';
-import { CurrentUser } from 'src/auth/current-user.decorator';
-import { JwtPayloadUser } from 'src/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/auth/decorators';
+import type { JwtPayloadUser } from 'src/auth/types';
 import { PERMISSIONS } from 'src/auth/permissions';
-import { RequirePermissions } from 'src/auth/permissions.decorator';
+import { RequirePermissions } from 'src/auth/decorators';
 
 @Controller('follow-ups')
 export class PatientFollowUpController {
