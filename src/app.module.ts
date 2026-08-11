@@ -11,6 +11,7 @@ import { AppointmentModule } from './appointment/appointment.module';
 import { AuthModule } from './auth/auth.module';
 import { BankAccountModule } from './bank-account/bank-account.module';
 import { ClinicModule } from './clinic/clinic.module';
+import { CsrfGuard } from './auth/guards/csrf.guard';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -76,8 +77,9 @@ import { ConsumableModule } from './consumable/consumable.module';
   controllers: [AppController],
   providers: [
     AppService,
-    // JWT → Roles (legacy @Roles) → Permissions (@RequirePermissions)
+    // JWT → CSRF → Roles (legacy @Roles) → Permissions (@RequirePermissions)
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

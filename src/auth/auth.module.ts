@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CookieAuthService } from './cookie/cookie-auth.service';
 import { PermissionsService } from './permissions.service';
+import { RefreshTokenRepository } from './refresh-token.repository';
 
 @Module({
   imports: [
@@ -16,13 +17,13 @@ import { PermissionsService } from './permissions.service';
       useFactory: (config: ConfigService): JwtModuleOptions => ({
         secret: config.get<string>('JWT_SECRET') ?? 'dev-secret-change-me',
         signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN') ?? '7d',
+          expiresIn: config.get<string>('JWT_ACCESS_EXPIRES') ?? '15m',
         } as JwtModuleOptions['signOptions'],
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, CookieAuthService, PermissionsService],
+  providers: [AuthService, CookieAuthService, PermissionsService, RefreshTokenRepository],
   exports: [JwtModule, PermissionsService, CookieAuthService],
 })
 export class AuthModule {}

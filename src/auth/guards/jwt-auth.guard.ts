@@ -7,7 +7,7 @@ import { AUTH_COOKIE_NAME } from '../cookie/cookie.constants';
 import { IS_PUBLIC_KEY } from '../decorators';
 import type { JwtPayloadUser } from '../types';
 
-/** Guard toàn cục: JWT từ HttpOnly cookie (hoặc Bearer) trừ @Public(). */
+/** Guard toàn cục: chỉ nhận JWT từ HttpOnly cookie (không Bearer). */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -46,16 +46,8 @@ export class JwtAuthGuard implements CanActivate {
     return true;
   }
 
-  /** Ưu tiên cookie; fallback Authorization Bearer (Safari / client không giữ cross-site cookie). */
   private extractToken(request: Request): string | undefined {
-    const fromCookie = request.cookies?.[AUTH_COOKIE_NAME];
-    if (typeof fromCookie === 'string' && fromCookie.length > 0) return fromCookie;
-
-    const header = request.headers.authorization;
-    if (typeof header === 'string' && header.startsWith('Bearer ')) {
-      const bearer = header.slice(7).trim();
-      if (bearer.length > 0) return bearer;
-    }
-    return undefined;
+    const token = request.cookies?.[AUTH_COOKIE_NAME];
+    return typeof token === 'string' && token.length > 0 ? token : undefined;
   }
 }
