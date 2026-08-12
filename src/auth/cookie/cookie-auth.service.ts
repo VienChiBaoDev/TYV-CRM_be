@@ -5,16 +5,16 @@ import type { CookieOptions, Response } from 'express';
 import {
   AUTH_COOKIE_NAME,
   CSRF_COOKIE_NAME,
+  REFRESH_COOKIE_CLEAR_PATHS,
   REFRESH_COOKIE_NAME,
   REFRESH_COOKIE_PATH,
 } from './cookie.constants';
 
 /**
- * Cookie auth theo CRM SPĐ:
- * - access: HttpOnly + SameSite=Lax
- * - refresh: HttpOnly + path /api/auth
- * - csrf: readable, double-submit header
- * Không trả token trong JSON.
+ * Cookie auth theo CRM SPĐ (same-site qua FE /api proxy):
+ * - access + refresh: HttpOnly + SameSite=Lax
+ * - csrf: readable, double-submit
+ * Prod Safari: bắt buộc VITE_API_URL=/api (không phải https://railway.../api).
  */
 @Injectable()
 export class CookieAuthService {
@@ -32,6 +32,7 @@ export class CookieAuthService {
       this.config.get<string>('JWT_REFRESH_EXPIRES') ?? '7d',
     );
     const csrf = randomBytes(32).toString('hex');
+    const refreshPath = this.refreshPath();
 
     res.cookie(AUTH_COOKIE_NAME, tokens.accessToken, {
       ...this.baseOptions(secure),
@@ -41,7 +42,7 @@ export class CookieAuthService {
     res.cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, {
       ...this.baseOptions(secure),
       maxAge: refreshMaxAge,
-      path: REFRESH_COOKIE_PATH,
+      path: refreshPath,
     });
 
     res.cookie(CSRF_COOKIE_NAME, csrf, {
@@ -55,13 +56,19 @@ export class CookieAuthService {
 
   clearAuthCookies(res: Response): void {
     const secure = this.isSecure();
-    res.clearCookie(AUTH_COOKIE_NAME, { path: '/', sameSite: 'lax', secure });
-    res.clearCookie(REFRESH_COOKIE_NAME, {
-      path: REFRESH_COOKIE_PATH,
-      sameSite: 'lax',
-      secure,
-    });
-    res.clearCookie(CSRF_COOKIE_NAME, { path: '/', sameSite: 'lax', secure });
+    const base: CookieOptions = { sameSite: 'lax', secure };
+
+    res.clearCookie(AUTH_COOKIE_NAME, { ...base, path: '/' });
+    res.clearCookie(CSRF_COOKIE_NAME, { ...base, path: '/' });
+
+    // Clear refresh trên mọi path từng dùng (tránh sót cookie khi đổi /api ↔ direct Railway).
+    for (const path of REFRESH_COOKIE_CLEAR_PATHS) {
+      res.clearCookie(REFRESH_COOKIE_NAME, { ...base, path });
+    }
+  }
+
+  private refreshPath(): string {
+    return this.config.get<string>('COOKIE_REFRESH_PATH')?.trim() || REFRESH_COOKIE_PATH;
   }
 
   private baseOptions(secure: boolean): CookieOptions {
