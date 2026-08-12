@@ -10,12 +10,6 @@ import {
   REFRESH_COOKIE_PATH,
 } from './cookie.constants';
 
-/**
- * Cookie auth theo CRM SPĐ (same-site qua FE /api proxy):
- * - access + refresh: HttpOnly + SameSite=Lax
- * - csrf: readable, double-submit
- * Prod Safari: bắt buộc VITE_API_URL=/api (không phải https://railway.../api).
- */
 @Injectable()
 export class CookieAuthService {
   constructor(private readonly config: ConfigService) {}
