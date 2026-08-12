@@ -56,7 +56,11 @@ Vào **Settings → Secrets and variables → Actions → Secrets**:
 3. Tab **Settings → Networking**: bật Public Domain để lấy URL cho FE gọi API.
 4. Tạo **Project Token**: Project → Settings → Tokens → chọn environment production → copy vào secret `RAILWAY_TOKEN`.
 
-Sau đó set `VITE_API_URL` trên Vercel = domain Railway vừa tạo.
+Sau đó trên Vercel set:
+
+- `VITE_API_URL=/api` (same-site proxy — Safari nhận cookie `SameSite=Lax`)
+- **Không** set `https://…railway.app/api` (BE không có prefix `/api` → lỗi `Cannot POST /api/auth/login`)
+- `vercel.json` đã rewrite `/api/:path*` → `https://tyv-crm-be-production.up.railway.app/:path*`
 
 ## Deploy thủ công / xử lý sự cố
 
