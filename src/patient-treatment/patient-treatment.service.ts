@@ -4,7 +4,7 @@ import type { JwtPayloadUser } from '../auth/types';
 import { assertPatientAccess } from '../auth/access/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
-import { SupabaseStorageService } from '../supabase/supabase-storage.service';
+// import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { UpsertTreatmentSessionDto } from './dto/upsert-treatment-session.dto';
 import {
   calcCompletedSessions,
@@ -20,6 +20,7 @@ import {
 } from './mappers/treatment-session.mapper';
 import { randomUUID } from 'node:crypto';
 import { TreatmentSessionConsumableLineDto } from './dto/treatment-session-consumable.dto';
+import { CloudinaryStorageService } from 'src/cloudinary/cloudinary-storage.service';
 
 const MAX_TREATMENT_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -45,7 +46,8 @@ const sessionInclude = {
 export class PatientTreatmentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supabaseStorage: SupabaseStorageService,
+    // private readonly supabaseStorage: SupabaseStorageService,
+    private readonly cloudinaryStorage: CloudinaryStorageService,
   ) {}
 
   /**
@@ -90,24 +92,24 @@ export class PatientTreatmentService {
     await assertPatientAccess(this.prisma, user, patientId);
 
     const sessions = await this.prisma.patientTreatmentSession.findMany({
-        where: {
-          patientServiceRecord: { patientId },
-        },
-        include: {
-          doctor: { select: { fullName: true } },
-          ptKtv: { select: { fullName: true } },
-          patientServiceRecord: {
-            select: {
-              id: true,
-              serviceName: true,
-              completedSessions: true,
-              treatmentCount: true,
-              quantity: true,
-            },
+      where: {
+        patientServiceRecord: { patientId },
+      },
+      include: {
+        doctor: { select: { fullName: true } },
+        ptKtv: { select: { fullName: true } },
+        patientServiceRecord: {
+          select: {
+            id: true,
+            serviceName: true,
+            completedSessions: true,
+            treatmentCount: true,
+            quantity: true,
           },
         },
-        orderBy: [{ performedAt: 'desc' }],
-      });
+      },
+      orderBy: [{ performedAt: 'desc' }],
+    });
 
     return sessions.map((session) => {
       const sessionTotal = getSessionTotal(session.patientServiceRecord);
@@ -251,15 +253,11 @@ export class PatientTreatmentService {
     await assertPatientAccess(this.prisma, user, patientId, 'edit');
     const service = await this.getActivePaidServiceOrThrow(patientId, serviceId);
     this.validateSessionNumber(service, sessionNumber);
-    const session = await this.ensureSessionForImageUpload(
-      serviceId,
-      sessionNumber,
-      user.id,
-    );
+    const session = await this.ensureSessionForImageUpload(serviceId, sessionNumber, user.id);
     this.assertValidImageFile(file);
     const extension = MIME_EXTENSION[file.mimetype] ?? 'jpg';
     const storagePath = `patients/${patientId}/treatment/${serviceId}/session-${sessionNumber}/${randomUUID()}.${extension}`;
-    const uploaded = await this.supabaseStorage.uploadObject(
+    const uploaded = await this.cloudinaryStorage.uploadObject(
       storagePath,
       file.buffer,
       file.mimetype,
@@ -315,7 +313,7 @@ export class PatientTreatmentService {
       throw new NotFoundException('Ảnh không tồn tại');
     }
     if (image.storagePath) {
-      await this.supabaseStorage.removeObject(image.storagePath);
+      await this.cloudinaryStorage.removeObject(image.storagePath);
     }
     await this.prisma.patientTreatmentSessionImage.delete({
       where: { id: imageId },

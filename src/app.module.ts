@@ -31,6 +31,7 @@ import { PatientTreatmentModule } from './patient-treatment/patient-treatment.mo
 import { StaffShiftModule } from './staff-shift/staff-shift.module';
 import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
 import { ConsumableModule } from './consumable/consumable.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { ConsumableModule } from './consumable/consumable.module';
     BankAccountModule,
     ClinicModule,
     ConsumableModule,
+    CloudinaryModule,
   ],
   controllers: [AppController],
   providers: [
