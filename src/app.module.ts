@@ -31,6 +31,7 @@ import { PatientTreatmentModule } from './patient-treatment/patient-treatment.mo
 import { StaffShiftModule } from './staff-shift/staff-shift.module';
 import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
 import { ConsumableModule } from './consumable/consumable.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { AiPrescriptionModule } from './ai-prescription/ai-prescription.module';
 
 @Module({
@@ -74,6 +75,7 @@ import { AiPrescriptionModule } from './ai-prescription/ai-prescription.module';
     BankAccountModule,
     ClinicModule,
     ConsumableModule,
+    CloudinaryModule,
     AiPrescriptionModule,
   ],
   controllers: [AppController],

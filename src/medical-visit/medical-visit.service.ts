@@ -5,7 +5,7 @@ import type { JwtPayloadUser } from '../auth/types';
 import { assertPatientAccess } from '../auth/access/patient-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRISMA_TRANSACTION_OPTIONS } from '../prisma/prisma-transaction.options';
-import { SupabaseStorageService } from '../supabase/supabase-storage.service';
+// import { SupabaseStorageService } from '../supabase/supabase-storage.service';
 import { CreateMedicalVisitDto, VisitHerbDto } from './dto/create-medical-visit.dto';
 import { UpdateMedicalVisitDto } from './dto/update-medical-visit.dto';
 import { FollowUpPlanDto } from './dto/create-medical-visit.dto';
@@ -21,6 +21,7 @@ import {
   subtractDays,
   toCustomerStatus,
 } from './mappers/visit.mapper';
+import { CloudinaryStorageService } from 'src/cloudinary/cloudinary-storage.service';
 
 const MAX_CLINICAL_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -53,13 +54,11 @@ const visitInclude = {
 export class MedicalVisitService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supabaseStorage: SupabaseStorageService,
+    // private readonly supabaseStorage: SupabaseStorageService,
+    private readonly cloudinaryStorage: CloudinaryStorageService,
   ) {}
 
-  async findAllByPatient(
-    patientId: string,
-    user: JwtPayloadUser,
-  ): Promise<MedicalVisitResponse[]> {
+  async findAllByPatient(patientId: string, user: JwtPayloadUser): Promise<MedicalVisitResponse[]> {
     await assertPatientAccess(this.prisma, user, patientId);
 
     const visits = await this.prisma.medicalVisit.findMany({
@@ -226,7 +225,7 @@ export class MedicalVisitService {
     const storagePath = `patients/${patientId}/visits/${visitId}/${folder}/${randomUUID()}.${extension}`;
 
     // Tải ảnh lên Supabase
-    const uploaded = await this.supabaseStorage.uploadObject(
+    const uploaded = await this.cloudinaryStorage.uploadObject(
       storagePath,
       file.buffer,
       file.mimetype,
@@ -277,7 +276,7 @@ export class MedicalVisitService {
 
     // Xóa ảnh khám từ Supabase
     if (image.storagePath) {
-      await this.supabaseStorage.removeObject(image.storagePath);
+      await this.cloudinaryStorage.removeObject(image.storagePath);
     }
 
     // Xóa ảnh khám từ database
@@ -334,9 +333,7 @@ export class MedicalVisitService {
       status: visit.status,
       herbs: visit.herbs?.length
         ? {
-            create: visit.herbs.map((herb, index) =>
-              this.buildHerbNestedCreate(herb, index),
-            ),
+            create: visit.herbs.map((herb, index) => this.buildHerbNestedCreate(herb, index)),
           }
         : undefined,
       clinicalImages: visit.clinicalImages?.length
@@ -508,9 +505,7 @@ export class MedicalVisitService {
       lineTotal: herb.lineTotal,
       decoctionOrder: herb.decoctionOrder,
       decoctionPrep: herb.decoctionPrep,
-      ...(herb.medicineId
-        ? { medicine: { connect: { id: herb.medicineId } } }
-        : {}),
+      ...(herb.medicineId ? { medicine: { connect: { id: herb.medicineId } } } : {}),
     };
   }
 
