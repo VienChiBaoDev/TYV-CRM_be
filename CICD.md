@@ -53,6 +53,7 @@ Vào **Settings → Secrets and variables → Actions → Secrets**:
    - `PORT=8080` (Dockerfile expose 8080 — hoặc để Railway tự inject `PORT`, app đã đọc `process.env.PORT`)
    - `CORS_ORIGIN=https://<domain-fe-tren-vercel>` (nhiều domain thì phân cách bằng dấu phẩy)
    - Các secret khác app cần (JWT, v.v. — xem `.env` local)
+   - `DEEPSEEK_API_KEY` (gợi ý AI Lần khám), optional: `DEEPSEEK_MODEL=deepseek-v4-pro`, `DEEPSEEK_BASE_URL=https://api.deepseek.com`
 3. Tab **Settings → Networking**: bật Public Domain để lấy URL cho FE gọi API.
 4. Tạo **Project Token**: Project → Settings → Tokens → chọn environment production → copy vào secret `RAILWAY_TOKEN`.
 
