@@ -53,6 +53,9 @@ Vào **Settings → Secrets and variables → Actions → Secrets**:
    - `PORT=8080` (Dockerfile expose 8080 — hoặc để Railway tự inject `PORT`, app đã đọc `process.env.PORT`)
    - `CORS_ORIGIN=https://<domain-fe-tren-vercel>` (nhiều domain thì phân cách bằng dấu phẩy)
    - Các secret khác app cần (JWT, v.v. — xem `.env` local)
+   - `AI_SERVICE_URL` (URL service Python `TYV-CRM_ai`, vd `http://tyv-crm-ai:8100`)
+   - `AI_SERVICE_KEY` (optional, trùng key trên service AI)
+   - DeepSeek key (`DEEPSEEK_API_KEY`) đặt trên **TYV-CRM_ai**, không đặt trên Nest BE
 3. Tab **Settings → Networking**: bật Public Domain để lấy URL cho FE gọi API.
 4. Tạo **Project Token**: Project → Settings → Tokens → chọn environment production → copy vào secret `RAILWAY_TOKEN`.
 
