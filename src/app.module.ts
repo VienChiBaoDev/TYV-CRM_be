@@ -32,7 +32,7 @@ import { StaffShiftModule } from './staff-shift/staff-shift.module';
 import { PrescriptionFormulaTemplateModule } from './prescription-formula-template/prescription-formula-template.module';
 import { ConsumableModule } from './consumable/consumable.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
-import { AiPrescriptionModule } from './ai-prescription/ai-prescription.module';
+import { AiIntegrationModule } from './ai-integration/ai-integration.module';
 
 @Module({
   imports: [
@@ -76,7 +76,7 @@ import { AiPrescriptionModule } from './ai-prescription/ai-prescription.module';
     ClinicModule,
     ConsumableModule,
     CloudinaryModule,
-    AiPrescriptionModule,
+    AiIntegrationModule,
   ],
   controllers: [AppController],
   providers: [

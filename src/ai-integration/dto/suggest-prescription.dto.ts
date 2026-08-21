@@ -24,6 +24,7 @@ class PulseDiagnosisInputDto {
   bung?: string;
 }
 
+/** Body FE gửi lên — BE chỉ forward kèm context CRM sang TYV-CRM_ai. */
 export class SuggestPrescriptionDto {
   @IsString()
   @MaxLength(8000)
