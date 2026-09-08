@@ -1,18 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
-import { CurrentUser } from '../auth/decorators';
-import type { JwtPayloadUser } from '../auth/types';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { PERMISSIONS } from '../auth/permissions';
-import { RequirePermissions } from '../auth/decorators';
+import type { JwtPayloadUser } from '../auth/types';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { ImportPatientsDto } from './dto/import-patients.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
 import { PatientService } from './patient.service';
@@ -40,10 +31,7 @@ export class PatientController {
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.PATIENTS_READ)
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayloadUser,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayloadUser) {
     return this.patientService.findOne(id, user);
   }
 
@@ -65,5 +53,11 @@ export class PatientController {
     @CurrentUser() user: JwtPayloadUser,
   ): Promise<PatientDetailResponse> {
     return this.patientService.findMedicalRecord(patientId, user);
+  }
+
+  @Post('import')
+  @RequirePermissions(PERMISSIONS.PATIENTS_WRITE)
+  importMany(@Body() dto: ImportPatientsDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.patientService.importMany(dto, user);
   }
 }
