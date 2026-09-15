@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CustomerStatus, Prisma, StaffRole } from '@prisma/client';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from 'src/common/dto/pagination-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
+import { buildPaginatedMeta } from 'src/common/pagination/paginate';
 import { assertClinicAccess } from '../auth/access/clinic-access';
 import { assertPatientAccess } from '../auth/access/patient-access';
 import type { JwtPayloadUser } from '../auth/types';
@@ -7,14 +10,13 @@ import { buildInitials } from '../common/mapper-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ImportPatientsDto, ImportPatientsResponse } from './dto/import-patients.dto';
+import { QueryPatientDto } from './dto/query-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { mapPatientToDetailResponse, PatientDetailResponse } from './mappers/patient.mapper';
 
-interface FindPatientsParams {
-  search?: string;
-  clinicId?: string;
-  referrerId?: string;
-}
+type PatientListItem = Prisma.PatientGetPayload<{
+  include: { referrer: { select: { id: true; fullName: true } } };
+}>;
 
 const patientInclude = {
   clinic: { select: { id: true, name: true } },
@@ -116,18 +118,27 @@ export class PatientService {
     });
   }
 
-  async findAll(params: FindPatientsParams, user: JwtPayloadUser) {
-    await assertClinicAccess(this.prisma, user, params.clinicId);
+  async findAll(
+    query: QueryPatientDto,
+    user: JwtPayloadUser,
+  ): Promise<PaginatedResponse<PatientListItem>> {
+    await assertClinicAccess(this.prisma, user, query.clinicId);
+
+    const page = query.page ?? DEFAULT_PAGE;
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const skip = (page - 1) * limit;
+
     const conditions: Prisma.PatientWhereInput[] = [];
 
-    if (params.clinicId) conditions.push({ clinicId: params.clinicId });
-    if (params.referrerId) conditions.push({ referrerId: params.referrerId });
-    if (params.search) {
+    if (query.clinicId) conditions.push({ clinicId: query.clinicId });
+    if (query.referrerId) conditions.push({ referrerId: query.referrerId });
+    if (query.search?.trim()) {
+      const search = query.search.trim();
       conditions.push({
         OR: [
-          { fullName: { contains: params.search, mode: 'insensitive' } },
-          { phone: { contains: params.search } },
-          { patientCode: { contains: params.search, mode: 'insensitive' } },
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search } },
+          { patientCode: { contains: search, mode: 'insensitive' } },
         ],
       });
     }
@@ -142,11 +153,22 @@ export class PatientService {
       });
     }
 
-    return this.prisma.patient.findMany({
-      where: conditions.length ? { AND: conditions } : {},
-      orderBy: { createdAt: 'desc' },
-      include: { referrer: { select: { id: true, fullName: true } } },
-    });
+    const where = conditions.length ? { AND: conditions } : {};
+
+    const [rows, total] = await Promise.all([
+      this.prisma.patient.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: { referrer: { select: { id: true, fullName: true } } },
+      }),
+      this.prisma.patient.count({ where }),
+    ]);
+    return {
+      data: rows,
+      meta: buildPaginatedMeta(page, limit, total),
+    };
   }
 
   async findOne(id: string, user: JwtPayloadUser) {
@@ -192,10 +214,7 @@ export class PatientService {
     const clinicMap = await this.buildClinicLookupMap();
     const clinicAccessChecked = new Set<string>();
     const clinicAccessDenied = new Set<string>();
-    const assignmentCache = new Map<
-      string,
-      { doctorIds: string[]; assistantIds: string[] }
-    >();
+    const assignmentCache = new Map<string, { doctorIds: string[]; assistantIds: string[] }>();
 
     const normalizedPhones = dto.items.map((item) => item.phone.replace(/\s+/g, ''));
     const existingRows = await this.prisma.patient.findMany({

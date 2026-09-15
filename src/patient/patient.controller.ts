@@ -4,6 +4,7 @@ import { PERMISSIONS } from '../auth/permissions';
 import type { JwtPayloadUser } from '../auth/types';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ImportPatientsDto } from './dto/import-patients.dto';
+import { QueryPatientDto } from './dto/query-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { PatientDetailResponse } from './mappers/patient.mapper';
 import { PatientService } from './patient.service';
@@ -20,13 +21,8 @@ export class PatientController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.PATIENTS_READ)
-  findAll(
-    @CurrentUser() user: JwtPayloadUser,
-    @Query('search') search?: string,
-    @Query('clinicId') clinicId?: string,
-    @Query('referrerId') referrerId?: string,
-  ) {
-    return this.patientService.findAll({ search, clinicId, referrerId }, user);
+  findAll(@Query() query: QueryPatientDto, @CurrentUser() user: JwtPayloadUser) {
+    return this.patientService.findAll(query, user);
   }
 
   @Get(':id')
