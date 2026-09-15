@@ -24,6 +24,10 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  // Mặc định Express ~100kb — import Excel batch 500+ dòng cần lớn hơn.
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { limit: '10mb', extended: true });
+
   app.useGlobalFilters(new AllExceptionsFilter());
   
   app.use(helmet({
